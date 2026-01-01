@@ -8,6 +8,7 @@ import {
 } from "react-router-dom";
 import { Toaster } from "react-hot-toast";
 import { AuthProvider, useAuth } from "./AuthContext";
+import useContentProtection from "./hooks/useContentProtection";
 
 // Layouts
 import AuthLayout from "./layouts/AuthLayout";
@@ -110,6 +111,8 @@ const RoleBasedDashboard = () => {
 };
 
 function App() {
+  useContentProtection();
+
   return (
     <Router future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
       <AuthProvider>

@@ -221,7 +221,7 @@ export default function AuthPage() {
 
             <div className="bg-slate-50 dark:bg-slate-900 p-4 rounded-xl border border-slate-200 dark:border-slate-700 text-left mb-6">
               <p className="text-[10px] font-bold text-slate-400 uppercase mb-1">Your Login Username</p>
-              <p className="text-xl font-mono font-black text-blue-500">{createdCredentials?.username}</p>
+              <p className="text-xl font-mono font-black text-blue-500 allow-select">{createdCredentials?.username}</p>
             </div>
 
             <button

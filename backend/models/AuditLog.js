@@ -13,7 +13,7 @@ const AuditLogSchema = new mongoose.Schema({
   targetType: {
     type: String,
     required: true,
-    enum: ['MedicalRecord', 'Queue', 'User', 'Report']
+    enum: ['MedicalRecord', 'Queue', 'User', 'Report', 'AdminConfig']
   },
 
   // ID of the specific document being modified
@@ -56,7 +56,7 @@ const AuditLogSchema = new mongoose.Schema({
     default: {}
   }
 
-}, { 
+}, {
   timestamps: { createdAt: true, updatedAt: false } // We only need to know WHEN it happened
 });
 

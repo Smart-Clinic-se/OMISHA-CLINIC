@@ -125,6 +125,7 @@ export const deleteQueueItemAPI = (id) => api.delete(`/queue/delete/${id}`);
 export const registerPatientQueueAPI = (data) => api.post('/queue/register', data);
 export const confirmVitalsAPI = (id, data) => api.put(`/queue/confirm-vitals/${id}`, data);
 export const notifyStaffAPI = (data) => api.post('/queue/notify-staff', data);
+export const getActivePassAPI = (patientId) => api.get(`/queue/active-pass?patientId=${patientId}`);
 
 // --- MEDICAL RECORDS ---
 export const addPrescriptionAPI = (data) => api.post('/medical/add', data);
@@ -134,5 +135,9 @@ export const amendRecordAPI = (id, data) => api.put(`/medical/amend/${id}`, data
 export const uploadReportAPI = (id, data) => api.post(`/medical/upload/${id}`, data);
 export const getAuditLogsAPI = (params) => api.get('/audit', { params });
 export const searchMedicineAPI = (query) => api.get(`/medicines/search?q=${query}`);
+
+// --- ADMIN CONFIG ---
+export const getSystemConfigAPI = () => api.get('/admin/config');
+export const updateValidityAPI = (data) => api.put('/admin/config/validity', data);
 
 export default api;

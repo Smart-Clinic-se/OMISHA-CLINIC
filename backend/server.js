@@ -1,5 +1,5 @@
 require('dotenv').config();
-const express = require('express');
+const express = require('express'); // Force Restart Again
 const mongoose = require('mongoose');
 const cors = require('cors');
 const http = require('http');
@@ -154,6 +154,7 @@ app.use('/api/medical', require('./routes/medical'));
 app.use('/api/users', require('./routes/users'));
 app.use('/api/audit', require('./routes/audit'));
 app.use('/api/medicines', require('./routes/medicines')); // [NEW] Medicine Search
+app.use('/api/admin', require('./routes/admin')); // [NEW] Admin Config
 
 // Health Check
 app.get('/health', (req, res) => {

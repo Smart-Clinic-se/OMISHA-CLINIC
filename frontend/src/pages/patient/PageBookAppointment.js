@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "../../AuthContext";
-import { getDoctorsAPI, addToQueueAPI } from "../../api";
+import { getDoctorsAPI, addToQueueAPI, getActivePassAPI } from "../../api";
 import toast from "react-hot-toast";
 import {
     Stethoscope,
@@ -24,6 +24,7 @@ export default function PageBookAppointment() {
     const [doctors, setDoctors] = useState([]);
     const [loading, setLoading] = useState(true);
     const [submitting, setSubmitting] = useState(false);
+    const [activePass, setActivePass] = useState(null);
 
     const formRef = useEnterNavigation();
 
@@ -52,8 +53,20 @@ export default function PageBookAppointment() {
                 setLoading(false);
             }
         };
+
+        const fetchActivePass = async () => {
+            if (!user?._id) return;
+            try {
+                const res = await getActivePassAPI(user._id);
+                setActivePass(res.data.data);
+            } catch (err) {
+                console.error("Failed to fetch active pass", err);
+            }
+        };
+
         fetchDoctors();
-    }, []);
+        fetchActivePass();
+    }, [user._id]);
 
     const handleBook = async () => {
         if (!selectedDoctor) return toast.error("Please select a doctor");
@@ -164,6 +177,27 @@ export default function PageBookAppointment() {
 
                         {selectedDoctor ? (
                             <div ref={formRef} className="space-y-8 animate-fade-in-up">
+
+                                {/* Active Pass Banner */}
+                                {activePass && (
+                                    <div className="bg-gradient-to-r from-emerald-50 to-teal-50 dark:from-emerald-900/20 dark:to-teal-900/20 border border-emerald-200 dark:border-emerald-700/50 rounded-2xl p-4 sm:p-5 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 animate-pulse-subtle">
+                                        <div>
+                                            <h4 className="flex items-center gap-2 font-bold text-emerald-800 dark:text-emerald-300 text-sm uppercase tracking-wide">
+                                                <div className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></div>
+                                                Active Medical Pass
+                                            </h4>
+                                            <p className="text-xs text-emerald-600 dark:text-emerald-400 mt-1 font-medium">
+                                                Free follow-up available until {new Date(activePass.validTo).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })}
+                                            </p>
+                                        </div>
+                                        <div className="text-right bg-white dark:bg-slate-800 px-3 py-1.5 rounded-lg border border-emerald-100 dark:border-emerald-900 shadow-sm">
+                                            <span className="block text-[10px] font-bold text-slate-400 uppercase">Valid For</span>
+                                            <span className="block font-black text-emerald-600 dark:text-emerald-400">
+                                                {Math.ceil((new Date(activePass.validTo) - new Date()) / (1000 * 60 * 60 * 24))} Days
+                                            </span>
+                                        </div>
+                                    </div>
+                                )}
 
                                 {/* Patient Summary Card */}
                                 {/* Patient Summary Card */}

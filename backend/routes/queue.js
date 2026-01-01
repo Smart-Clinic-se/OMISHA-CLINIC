@@ -65,6 +65,29 @@ router.get('/', async (req, res) => {
   }
 });
 
+// === GET: Active Pass for Patient ===
+router.get('/active-pass', async (req, res) => {
+  try {
+    const { patientId } = req.query;
+    if (!patientId) {
+      return res.status(400).json({ success: false, message: "Patient ID is required" });
+    }
+
+    const activePass = await ConsultationPass.findOne({
+      patientId: patientId,
+      status: 'Active',
+      validTo: { $gt: new Date() } // Strictly future expiry
+    })
+      .populate('doctorId', 'name specialization')
+      .sort({ validTo: -1 }); // Get the one with latest expiry if multiple (should be unique though)
+
+    res.json({ success: true, data: activePass });
+  } catch (err) {
+    console.error("Active Pass GET Error:", err);
+    res.status(500).json({ success: false, message: "Failed to fetch active pass" });
+  }
+});
+
 // === POST: Register New Patient & Add to Queue (Staff Triage) ===
 router.post('/register', async (req, res) => {
   try {
