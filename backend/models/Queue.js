@@ -2,9 +2,9 @@ const mongoose = require('mongoose');
 
 const QueueSchema = new mongoose.Schema({
     // The visible Token (e.g., "RAJ-001")
-    tokenNumber: { 
-        type: String, 
-        required: true, 
+    tokenNumber: {
+        type: String,
+        required: true,
         trim: true
     },
 
@@ -24,8 +24,8 @@ const QueueSchema = new mongoose.Schema({
     gender: { type: String },
 
     // Assigned Doctor
-    assignedTo: { 
-        type: mongoose.Schema.Types.ObjectId, 
+    assignedTo: {
+        type: mongoose.Schema.Types.ObjectId,
         ref: 'User',
         required: true,
         index: true
@@ -44,11 +44,17 @@ const QueueSchema = new mongoose.Schema({
     },
 
     // Status Flow [cite: 88]
-    status: { 
-        type: String, 
-        enum: ['Waiting', 'In-Cabin', 'Completed', 'Cancelled', 'Skipped', 'No-Show'], 
+    status: {
+        type: String,
+        enum: ['Waiting', 'In-Cabin', 'Completed', 'Cancelled', 'Skipped', 'No-Show'],
         default: 'Waiting',
         index: true
+    },
+
+    // Vitals Logic
+    vitalsConfirmed: {
+        type: Boolean,
+        default: false
     },
 
     // Timestamps for Analytics & History Snapshot [cite: 54, 120-123]
@@ -61,6 +67,11 @@ const QueueSchema = new mongoose.Schema({
         type: String,
         enum: ['Paid', 'Unpaid'],
         default: 'Unpaid'
+    },
+    // Traceability to Pass
+    consultationPassId: {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: 'ConsultationPass'
     },
     // Optional amount field for record-keeping [cite: 59]
     amount: {
@@ -81,11 +92,11 @@ const QueueSchema = new mongoose.Schema({
         required: true,
         index: true
     },
-    
+
     notes: { type: String }
 
-}, { 
-    timestamps: true 
+}, {
+    timestamps: true
 });
 
 // Compound Index: Ensure unique token numbers for a doctor on a specific date

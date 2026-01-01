@@ -2,38 +2,30 @@ import React, { useState, useEffect } from "react";
 import { useAuth } from "../../AuthContext";
 import toast from "react-hot-toast";
 import { updateDoctorAvailabilityAPI } from "../../api";
-
-const StatusIcon = ({ status }) => {
-  const icons = {
-    available: (
-      <svg className="w-8 h-8 text-emerald-500" fill="currentColor" viewBox="0 0 20 20">
-        <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
-      </svg>
-    ),
-    break: (
-      <svg className="w-8 h-8 text-amber-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
-      </svg>
-    ),
-    offline: (
-      <svg className="w-8 h-8 text-red-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M18.364 5.636l-12.728 12.728m0-12.728l12.728 12.728" />
-      </svg>
-    ),
-  };
-  return icons[status] || icons.available;
-};
+import {
+  CheckCircle,
+  Coffee,
+  XCircle,
+  Clock,
+  Activity,
+  Zap
+} from "lucide-react";
 
 export default function PageUpdateAvailability() {
   const { user, updateAvailability } = useAuth();
   const [loading, setLoading] = useState(false);
-  // Default to safe values if user not fully loaded yet
   const [status, setStatus] = useState(user?.isAvailable ? "available" : "offline");
   const [breakMinutes, setBreakMinutes] = useState(15);
 
   useEffect(() => {
     if (user) {
-        setStatus(user.isAvailable ? (user.isOnBreak ? "break" : "available") : "offline");
+      if (user.availabilityStatus === 'Shift Ended' || user.availabilityStatus === 'Not Available') {
+        setStatus('offline');
+      } else if (user.availabilityStatus === 'On Break') {
+        setStatus('break');
+      } else {
+        setStatus('available');
+      }
     }
   }, [user]);
 
@@ -42,29 +34,15 @@ export default function PageUpdateAvailability() {
     setLoading(true);
 
     try {
-      let payload = { isAvailable: true, isOnBreak: false };
+      // Map simplified UI status to backend status strings
+      let backendStatus = 'Available';
+      if (newStatus === 'break') backendStatus = 'On Break';
+      if (newStatus === 'offline') backendStatus = 'Shift Ended';
 
-      if (newStatus === "break") {
-        payload.isOnBreak = true;
-        payload.breakUntil = new Date(Date.now() + breakMinutes * 60 * 1000);
-      } else if (newStatus === "offline") {
-        payload.isAvailable = false;
-      }
+      await updateAvailability(backendStatus, newStatus === 'break' ? breakMinutes : 0);
 
-      // 1. Call API
-      await updateDoctorAvailabilityAPI(user._id, payload);
-
-      // 2. Update Context (UI updates immediately)
-      updateAvailability(payload.isAvailable, payload.isOnBreak);
-
-      const messages = {
-        available: "You are now ONLINE — Accepting patients",
-        break: `On Break for ${breakMinutes} minutes`,
-        offline: "You are now OFFLINE — Queue closed",
-      };
-
-      toast.success(messages[newStatus], { duration: 4000 });
       setStatus(newStatus);
+      toast.success(`Status updated to: ${backendStatus}`);
 
     } catch (err) {
       console.error(err);
@@ -74,154 +52,157 @@ export default function PageUpdateAvailability() {
     }
   };
 
-  // Safety Check: Prevent crash if user is null or not a doctor
   if (!user || user.role !== "doctor") {
     return (
-        <div className="min-h-screen flex items-center justify-center">
-            <div className="animate-pulse text-gray-500">Loading availability controls...</div>
-        </div>
+      <div className="min-h-screen flex items-center justify-center bg-slate-50 dark:bg-slate-900">
+        <div className="animate-pulse text-slate-400 font-bold">Loading availability controls...</div>
+      </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-indigo-50 via-purple-50 to-pink-50 p-6">
-      <div className="max-w-6xl mx-auto">
+    <div className="max-w-6xl mx-auto p-4 animate-fade-in-up">
 
-        {/* Header */}
-        <div className="text-center mb-12">
-          <h1 className="text-5xl font-black text-transparent bg-clip-text bg-gradient-to-r from-indigo-600 to-purple-600">
-            Dr. {user.name}
-          </h1>
-          <p className="text-xl text-gray-600 mt-3">Manage Your Real-Time Availability</p>
-        </div>
+      {/* Header */}
+      {/* Header */}
+      <div className="text-center mb-12">
+        <h1 className="text-3xl md:text-4xl font-black text-slate-900 dark:text-white mb-2 tracking-tight">
+          Manage Availability
+        </h1>
+        <p className="text-slate-500 dark:text-slate-400 text-lg font-medium tracking-tight">Control your queue visibility and session status.</p>
+      </div>
 
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
 
-          {/* Current Status Card */}
-          <div className="lg:col-span-2">
-            <div className="bg-white rounded-3xl shadow-2xl p-10 border border-gray-100">
-              <h2 className="text-3xl font-bold text-gray-800 mb-8 flex items-center gap-4">
-                <StatusIcon status={status} />
-                Current Status
-              </h2>
+        {/* Current Status Card */}
+        <div className="lg:col-span-2 space-y-8">
 
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+          {/* AVAILABLE */}
+          <button
+            onClick={() => handleStatusChange("available")}
+            disabled={loading || status === "available"}
+            className={`w-full group relative p-8 rounded-3xl border-2 transition-all duration-300 text-left flex items-center gap-6 ${status === "available"
+              ? "border-emerald-500 bg-emerald-50 dark:bg-emerald-500/10 shadow-xl shadow-emerald-500/10 scale-[1.02]"
+              : "border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 hover:border-emerald-400 dark:hover:border-emerald-600 hover:shadow-lg shadow-sm"
+              }`}
+          >
+            <div className={`w-20 h-20 rounded-2xl flex items-center justify-center transition-colors ${status === "available" ? "bg-emerald-500 text-white" : "bg-slate-100 dark:bg-slate-700 text-slate-400 group-hover:text-emerald-500"}`}>
+              <CheckCircle className="w-10 h-10" />
+            </div>
+            <div>
+              <h3 className={`text-2xl font-bold mb-1 ${status === "available" ? "text-emerald-700 dark:text-emerald-400" : "text-slate-700 dark:text-slate-300"}`}>Available</h3>
+              <p className="text-slate-500 dark:text-slate-400 font-medium">I am ready to see patients. Open the queue.</p>
+            </div>
+            {status === "available" && (
+              <span className="absolute top-6 right-6 bg-emerald-500 text-white px-3 py-1 rounded-full text-xs font-bold animate-pulse shadow-lg shadow-emerald-500/40">
+                ACTIVE
+              </span>
+            )}
+          </button>
 
-                {/* AVAILABLE */}
-                <button
-                  onClick={() => handleStatusChange("available")}
-                  disabled={loading || status === "available"}
-                  className={`relative p-8 rounded-2xl border-4 transition-all transform hover:scale-105 ${
-                    status === "available"
-                      ? "border-emerald-500 bg-emerald-50 shadow-xl"
-                      : "border-gray-200 bg-gray-50 hover:border-emerald-300"
-                  }`}
-                >
-                  <div className="text-center">
-                    <div className="text-6xl mb-4">🟢</div>
-                    <div className="text-xl font-bold mb-1">Available</div>
-                    <p className="text-gray-500 text-sm">Ready for patients</p>
-                    {status === "available" && (
-                      <span className="absolute top-4 right-4 bg-emerald-500 text-white px-3 py-1 rounded-full text-xs font-bold animate-pulse">
-                        LIVE
-                      </span>
-                    )}
-                  </div>
-                </button>
+          {/* ON BREAK */}
+          <div className={`relative p-8 rounded-3xl border-2 transition-all duration-300 ${status === "break" ? "border-amber-500 bg-amber-50 dark:bg-amber-500/10 shadow-xl shadow-amber-500/10 scale-[1.02]" : "border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800"}`}>
+            <div className="flex items-center gap-6 mb-6 cursor-pointer" onClick={() => handleStatusChange("break")}>
+              <div className={`w-20 h-20 rounded-2xl flex items-center justify-center transition-colors ${status === "break" ? "bg-amber-500 text-white" : "bg-slate-100 dark:bg-slate-700 text-slate-400 hover:text-amber-500"}`}>
+                <Coffee className="w-10 h-10" />
+              </div>
+              <div className="flex-1">
+                <h3 className={`text-2xl font-bold mb-1 ${status === "break" ? "text-amber-700 dark:text-amber-400" : "text-slate-700 dark:text-slate-300"}`}>Take a Break</h3>
+                <p className="text-slate-500 dark:text-slate-400 font-medium">Pause the queue temporarily.</p>
+              </div>
+            </div>
 
-                {/* ON BREAK */}
-                <div className={`rounded-2xl ${status === "break" ? "ring-4 ring-amber-300" : ""}`}>
-                  <button
-                    onClick={() => handleStatusChange("break")}
-                    disabled={loading || status === "break"}
-                    className={`w-full p-8 rounded-2xl border-4 transition-all transform hover:scale-105 ${
-                      status === "break"
-                        ? "border-amber-500 bg-amber-50 shadow-xl"
-                        : "border-gray-200 bg-gray-50 hover:border-amber-300"
-                    }`}
-                  >
-                    <div className="text-center">
-                      <div className="text-6xl mb-4">☕</div>
-                      <div className="text-xl font-bold mb-1">On Break</div>
-                      <p className="text-gray-500 text-sm">Quick pause</p>
-                    </div>
-                  </button>
-
-                  {/* Slider only shows if NOT already on break (to set duration) OR if currently on break (to adjust) */}
-                  <div className="mt-4 px-2">
-                      <input
-                        type="range"
-                        min="5"
-                        max="60"
-                        step="5"
-                        value={breakMinutes}
-                        onChange={(e) => setBreakMinutes(e.target.value)}
-                        className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer accent-amber-500"
-                      />
-                      <div className="flex justify-between text-xs text-gray-500 mt-2 font-bold">
-                        <span>5m</span>
-                        <span className="text-amber-600">{breakMinutes} min</span>
-                        <span>60m</span>
-                      </div>
-                   </div>
-                </div>
-
-                {/* OFFLINE */}
-                <button
-                  onClick={() => handleStatusChange("offline")}
-                  disabled={loading || status === "offline"}
-                  className={`relative p-8 rounded-2xl border-4 transition-all transform hover:scale-105 ${
-                    status === "offline"
-                      ? "border-red-500 bg-red-50 shadow-xl"
-                      : "border-gray-200 bg-gray-50 hover:border-red-300"
-                  }`}
-                >
-                  <div className="text-center">
-                    <div className="text-6xl mb-4">🔴</div>
-                    <div className="text-xl font-bold mb-1">Offline</div>
-                    <p className="text-gray-500 text-sm">End shift</p>
-                    {status === "offline" && (
-                      <span className="absolute top-4 right-4 bg-red-500 text-white px-3 py-1 rounded-full text-xs font-bold">
-                        OFF
-                      </span>
-                    )}
-                  </div>
-                </button>
+            {/* Slider */}
+            <div className="bg-slate-100 dark:bg-slate-900/50 p-4 rounded-xl">
+              <div className="flex justify-between text-sm font-bold text-slate-500 dark:text-slate-400 mb-2">
+                <span>Duration</span>
+                <span className="text-amber-600 dark:text-amber-400">{breakMinutes} mins</span>
+              </div>
+              <input
+                type="range"
+                min="5"
+                max="60"
+                step="5"
+                value={breakMinutes}
+                onChange={(e) => setBreakMinutes(e.target.value)}
+                disabled={loading}
+                className="w-full h-2 bg-slate-200 dark:bg-slate-700 rounded-lg appearance-none cursor-pointer accent-amber-500"
+              />
+              <div className="flex justify-between text-xs text-slate-400 mt-2 font-mono">
+                <span>5m</span>
+                <span>30m</span>
+                <span>60m</span>
               </div>
             </div>
           </div>
 
-          {/* Stats Card */}
-          <div className="space-y-6">
-            <div className="bg-gradient-to-br from-purple-600 to-indigo-700 rounded-3xl shadow-2xl p-8 text-white">
-              <h3 className="text-2xl font-bold mb-6">Session Info</h3>
-              <div className="space-y-6 text-left">
-                <div>
-                  <p className="text-purple-200 text-sm uppercase font-bold">Current Status</p>
-                  <p className="text-3xl font-black tracking-wide">
-                    {status === "available" && "ONLINE"}
-                    {status === "break" && "ON BREAK"}
-                    {status === "offline" && "OFFLINE"}
-                  </p>
+          {/* OFFLINE */}
+          <button
+            onClick={() => handleStatusChange("offline")}
+            disabled={loading || status === "offline"}
+            className={`w-full group relative p-8 rounded-3xl border-2 transition-all duration-300 text-left flex items-center gap-6 ${status === "offline"
+              ? "border-red-500 bg-red-50 dark:bg-red-500/10 shadow-xl shadow-red-500/10 scale-[1.02]"
+              : "border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 hover:border-red-400 dark:hover:border-red-600 hover:shadow-lg"
+              }`}
+          >
+            <div className={`w-20 h-20 rounded-2xl flex items-center justify-center transition-colors ${status === "offline" ? "bg-red-500 text-white" : "bg-slate-100 dark:bg-slate-700 text-slate-400 group-hover:text-red-500"}`}>
+              <XCircle className="w-10 h-10" />
+            </div>
+            <div>
+              <h3 className={`text-2xl font-bold mb-1 ${status === "offline" ? "text-red-700 dark:text-red-400" : "text-slate-700 dark:text-slate-300"}`}>Shift Ended</h3>
+              <p className="text-slate-500 dark:text-slate-400 font-medium">Close queue and stop accepting new patients.</p>
+            </div>
+          </button>
+
+        </div>
+
+        {/* Stats Card */}
+        <div className="space-y-6">
+          <div className="bg-gradient-to-br from-indigo-600 to-purple-700 rounded-[2.5rem] shadow-2xl p-8 text-white relative overflow-hidden">
+            <div className="absolute top-0 right-0 w-40 h-40 bg-white/10 rounded-full blur-3xl -translate-y-1/2 translate-x-1/3"></div>
+
+            <h3 className="text-xl font-bold mb-8 flex items-center gap-2 relative z-10">
+              <Activity className="w-5 h-5" /> Session Status
+            </h3>
+
+            <div className="space-y-8 relative z-10">
+              <div>
+                <p className="text-indigo-200 text-xs uppercase font-bold tracking-widest mb-2">Current State</p>
+                <div className="text-4xl font-black tracking-tight">
+                  {status === "available" && "ONLINE"}
+                  {status === "break" && "ON BREAK"}
+                  {status === "offline" && "OFFLINE"}
                 </div>
-                <div>
-                   <p className="text-purple-200 text-sm uppercase font-bold">System Mode</p>
-                   <p className="text-xl font-medium opacity-90">Real-time Queue</p>
+              </div>
+
+              <div>
+                <p className="text-indigo-200 text-xs uppercase font-bold tracking-widest mb-2">System Mode</p>
+                <div className="flex items-center gap-2 text-xl font-bold">
+                  <Zap className="w-5 h-5 text-yellow-300" /> Real-time Queue
                 </div>
               </div>
             </div>
-
-            <div className="bg-white rounded-3xl shadow-2xl p-8 border border-gray-100">
-              <h3 className="text-lg font-bold text-gray-800 mb-4">Quick Legend</h3>
-              <ul className="space-y-3 text-sm font-medium text-gray-600">
-                <li className="flex items-center gap-3"><div className="w-3 h-3 rounded-full bg-emerald-500"></div> Accepting patients</li>
-                <li className="flex items-center gap-3"><div className="w-3 h-3 rounded-full bg-amber-500"></div> Queue paused (Break)</li>
-                <li className="flex items-center gap-3"><div className="w-3 h-3 rounded-full bg-red-500"></div> Queue closed (Hidden)</li>
-              </ul>
-            </div>
           </div>
 
+          <div className="bg-white dark:bg-slate-800 rounded-3xl shadow-lg border border-slate-200 dark:border-slate-700 p-6 sm:p-8">
+            <h3 className="text-sm font-bold text-slate-400 uppercase tracking-widest mb-6">Quick Legend</h3>
+            <ul className="space-y-4 text-sm font-bold text-slate-600 dark:text-slate-300">
+              <li className="flex items-center gap-3">
+                <div className="w-3 h-3 rounded-full bg-emerald-500 shadow-lg shadow-emerald-500/50"></div>
+                Accepting patients
+              </li>
+              <li className="flex items-center gap-3">
+                <div className="w-3 h-3 rounded-full bg-amber-500 shadow-lg shadow-amber-500/50"></div>
+                Queue paused (Break)
+              </li>
+              <li className="flex items-center gap-3">
+                <div className="w-3 h-3 rounded-full bg-red-500 shadow-lg shadow-red-500/50"></div>
+                Queue closed (Hidden)
+              </li>
+            </ul>
+          </div>
         </div>
+
       </div>
     </div>
   );

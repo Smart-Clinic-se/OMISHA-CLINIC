@@ -1,5 +1,6 @@
 import axios from 'axios';
 import { io } from 'socket.io-client';
+import { playNotificationSound } from './utils/audio';
 
 // ==================== BACKEND URL ====================
 const BASE_URL = process.env.REACT_APP_API_URL || 'http://localhost:5000';
@@ -43,13 +44,6 @@ api.interceptors.response.use(
 
 // ==================== NOTIFICATION SYSTEM ====================
 let notificationShown = false;
-let notificationAudio = null;
-
-const loadNotificationSound = () => {
-  notificationAudio = new Audio('https://assets.mixkit.co/sfx/preview/mixkit-bell-notification-933.mp3');
-  notificationAudio.volume = 0.7;
-};
-loadNotificationSound();
 
 export const requestNotificationPermission = async () => {
   if ('Notification' in window && Notification.permission === 'default') {
@@ -76,7 +70,7 @@ export const checkIfMyTurnIsNear = (myToken, currentServingToken) => {
       });
     }
 
-    notificationAudio?.play().catch(() => { });
+    playNotificationSound();
     notificationShown = true;
     setTimeout(() => { notificationShown = false; }, 60000);
   }
@@ -93,11 +87,18 @@ export const listenToDoctorStatus = (callback) => {
   return () => socket.off('doctor_status_update');
 };
 
+export const listenToStaffNotifications = (callback) => {
+  socket.on('staff_notification', callback);
+  return () => socket.off('staff_notification');
+};
+
 
 // --- AUTHENTICATION ---
 export const loginAPI = (data) => api.post('/auth/login', data);
 export const registerAPI = (data) => api.post('/auth/register', data);
-export const registerStaffAPI = (data) => api.post('/auth/register-staff', data);
+export const registerStaffAPI = (data) => api.post('/auth/register-staff', data, {
+  headers: { 'Content-Type': 'multipart/form-data' }
+});
 export const getSecurityQuestionAPI = (data) => api.post('/auth/get-security-question', data);
 export const resetPasswordAPI = (data) => api.post('/auth/reset-password', data);
 export const setSecurityQuestionAPI = (data) => api.post('/auth/set-security-question', data);
@@ -109,12 +110,21 @@ export const getDoctorsAPI = () => api.get('/auth/doctors');
 export const getUsersByRoleAPI = (role) => api.get(`/auth/users?role=${role}`);
 export const updateDoctorAvailabilityAPI = (doctorId, payload) =>
   api.patch(`/auth/availability/${doctorId}`, payload);
+export const updateProfilePhotoAPI = (data) => api.patch('/users/profile-photo', data, {
+  headers: { 'Content-Type': 'multipart/form-data' }
+});
+export const updateProfileAPI = (data) => api.patch('/users/profile', data);
 
 // --- QUEUE ---
 export const getQueueAPI = (params) => api.get('/queue', { params });
 export const addToQueueAPI = (data) => api.post('/queue/add', data);
+export const collectPaymentAPI = (data) => api.post('/queue/collect-payment', data);
+export const overridePaymentAPI = (data) => api.post('/queue/override-payment', data);
 export const updateQueueStatusAPI = (id, updateData) => api.put(`/queue/update/${id}`, updateData);
 export const deleteQueueItemAPI = (id) => api.delete(`/queue/delete/${id}`);
+export const registerPatientQueueAPI = (data) => api.post('/queue/register', data);
+export const confirmVitalsAPI = (id, data) => api.put(`/queue/confirm-vitals/${id}`, data);
+export const notifyStaffAPI = (data) => api.post('/queue/notify-staff', data);
 
 // --- MEDICAL RECORDS ---
 export const addPrescriptionAPI = (data) => api.post('/medical/add', data);
@@ -122,6 +132,7 @@ export const getPatientHistoryAPI = (params) => api.get('/medical/history', { pa
 export const getMedicalRecordByIdAPI = (id) => api.get(`/medical/record/${id}`);
 export const amendRecordAPI = (id, data) => api.put(`/medical/amend/${id}`, data);
 export const uploadReportAPI = (id, data) => api.post(`/medical/upload/${id}`, data);
-export const getAuditLogsAPI = () => api.get('/auth/audit-logs');
+export const getAuditLogsAPI = (params) => api.get('/audit', { params });
+export const searchMedicineAPI = (query) => api.get(`/medicines/search?q=${query}`);
 
 export default api;

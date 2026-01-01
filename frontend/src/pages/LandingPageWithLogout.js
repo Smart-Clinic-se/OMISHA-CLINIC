@@ -1,36 +1,45 @@
-import React from "react";
+import React, { useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import LandingPage from "./LandingPage";
 import { useAuth } from "../AuthContext";
+import toast from "react-hot-toast";
 
 /**
- * Forced logout wrapper - SYNCHRONOUS logout during render.
- * This runs BEFORE any child components mount.
+ * Forced logout wrapper.
+ * Handles the logic of clearing the session and then renders the beautiful LandingPage.
  */
 export default function LandingPageWithLogout() {
     const { user, silentLogout } = useAuth();
     const navigate = useNavigate();
 
-    // Move side effects to useEffect
-    React.useEffect(() => {
+    useEffect(() => {
         if (user) {
-            // Clear storage immediately
-            localStorage.clear();
-            sessionStorage.clear();
+            // 1. UI Feedback: Premium "Goodbye" Toast
+            toast.success("You have been logged out securely. See you soon!", {
+                icon: "👋",
+                duration: 4000,
+                style: {
+                    borderRadius: '16px',
+                    background: '#1e293b', // Slate-800
+                    color: '#fff',
+                    fontWeight: 'bold',
+                    border: '1px solid #334155' // Slate-700
+                },
+            });
 
-            // Clear React state
+            // 2. Logic: Clear Storage & State (Handled by silentLogout to preserve theme)
             silentLogout();
 
-            // Force re-render by navigating to the same path
-            // This ensures auth state is cleared before any navigation
+            // 3. Navigation: Force a cleaner URL state
             navigate('/', { replace: true });
         }
     }, [user, silentLogout, navigate]);
 
-    // Prevent rendering while authenticated to avoid flash of content
+    // Prevent rendering content while the logout logic processes
     if (user) {
         return null;
     }
 
+    // Render the fully styled Premium Landing Page
     return <LandingPage />;
 }

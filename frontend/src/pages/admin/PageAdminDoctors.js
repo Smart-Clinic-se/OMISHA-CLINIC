@@ -1,5 +1,4 @@
-import React, { useState, useEffect, useCallback } from "react";
-// FIXED: Imported getUsersByRoleAPI
+import React, { useState, useEffect, useCallback, useRef } from "react";
 import { registerStaffAPI, getUsersByRoleAPI } from "../../api";
 import toast from "react-hot-toast";
 import {
@@ -12,13 +11,19 @@ import {
     Clipboard,
     CheckCircle,
     Copy,
-    X
+    X,
+    Loader
 } from "lucide-react";
+import { useEnterNavigation } from "../../hooks/useEnterNavigation";
 
 export default function PageAdminDoctors() {
-    const [activeTab, setActiveTab] = useState("doctor"); // 'doctor' or 'staff'
-    const [teamList, setTeamList] = useState([]); // Stores the list of currently active tab
+    const [activeTab, setActiveTab] = useState("doctor");
+    const [teamList, setTeamList] = useState([]);
     const [loading, setLoading] = useState(false);
+    const [photoPreview, setPhotoPreview] = useState(null);
+    const fileInputRef = useRef(null);
+
+    const formRef = useEnterNavigation();
 
     // Success Popup State
     const [showSuccessPopup, setShowSuccessPopup] = useState(false);
@@ -28,15 +33,18 @@ export default function PageAdminDoctors() {
         firstName: "",
         lastName: "",
         mobile: "",
-        // Password is now auto-generated
         role: "doctor",
-        specialization: ""
+        specialization: "",
+        qualification: "",
+        experience: "",
+        hospitalName: "",
+        consultationFee: "",
+        photo: null
     });
 
     // Fetch Team based on Active Tab
     const fetchTeam = useCallback(async () => {
         try {
-            // Calls the new API: /auth/users?role=doctor OR /auth/users?role=staff
             const res = await getUsersByRoleAPI(activeTab);
             setTeamList(res.data || []);
         } catch (err) {
@@ -45,7 +53,6 @@ export default function PageAdminDoctors() {
         }
     }, [activeTab]);
 
-    // Refetch whenever tab changes
     useEffect(() => {
         fetchTeam();
     }, [fetchTeam]);
@@ -71,23 +78,38 @@ export default function PageAdminDoctors() {
         setLoading(true);
 
         try {
-            const payload = {
-                ...formData,
-                role: activeTab // 'doctor' or 'staff'
-            };
+            const payload = new FormData();
+            Object.keys(formData).forEach(key => {
+                if (key !== 'role' && formData[key] !== null) {
+                    payload.append(key, formData[key]);
+                }
+            });
+            payload.append('role', activeTab);
 
             const res = await registerStaffAPI(payload);
 
-            // Show Success Popup with Credentials
             setCreatedCredentials(res.data.credentials);
             setShowSuccessPopup(true);
 
             toast.success(res.data.message);
 
-            // Reset Form
-            setFormData({ firstName: "", lastName: "", mobile: "", role: activeTab, specialization: "" });
+            setFormData({
+                firstName: "",
+                lastName: "",
+                mobile: "",
+                role: activeTab,
+                specialization: "",
+                qualification: "",
+                experience: "",
+                hospitalName: "",
+                consultationFee: "",
+                photo: null
+            });
+            setPhotoPreview(null);
+            if (fileInputRef.current) {
+                fileInputRef.current.value = "";
+            }
 
-            // Refresh list
             fetchTeam();
 
         } catch (err) {
@@ -99,52 +121,53 @@ export default function PageAdminDoctors() {
 
     const copyToClipboard = () => {
         if (!createdCredentials) return;
-        const text = `Username: ${createdCredentials.username}\nPassword: ${createdCredentials.password}`;
+        const text = `Username: ${createdCredentials.username} \nPassword: ${createdCredentials.password} `;
         navigator.clipboard.writeText(text);
         toast.success("Credentials copied to clipboard!");
     };
 
     return (
-        <div className="max-w-6xl mx-auto p-6 relative">
+        <div className="max-w-7xl mx-auto p-6 animate-fade-in-up">
 
             {/* SUCCESS POPUP */}
             {showSuccessPopup && createdCredentials && (
-                <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-                    <div className="bg-white rounded-2xl shadow-2xl max-w-md w-full p-6 animate-fade-in-up">
-                        <div className="flex justify-center mb-4">
-                            <div className="bg-green-100 p-3 rounded-full">
-                                <CheckCircle className="w-8 h-8 text-green-600" />
+                <div className="fixed inset-0 bg-slate-900/80 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+                    <div className="bg-white dark:bg-slate-800 rounded-3xl shadow-2xl max-w-md w-full p-6 sm:p-8 animate-fade-in-up border border-slate-200 dark:border-slate-700">
+                        <div className="flex justify-center mb-6">
+                            <div className="bg-emerald-100 dark:bg-emerald-500/10 p-4 rounded-full border border-emerald-200 dark:border-emerald-500/20 shadow-lg shadow-emerald-500/20">
+                                <CheckCircle className="w-10 h-10 text-emerald-600 dark:text-emerald-500" />
                             </div>
                         </div>
 
-                        <h3 className="text-xl font-bold text-center text-slate-800 mb-2">User Registered Successfully</h3>
-                        <p className="text-center text-slate-500 mb-6">
-                            Please share these temporary credentials with the user. They will be asked to change their password on first login.
+                        <h3 className="text-2xl font-black text-center text-slate-900 dark:text-white mb-2">Registration Successful</h3>
+                        <p className="text-center text-slate-500 dark:text-slate-400 mb-8 font-medium">
+                            Please share these credentials. The user will be prompted to change their password on first login.
                         </p>
 
-                        <div className="bg-slate-50 p-4 rounded-xl border border-slate-200 mb-6">
-                            <div className="flex justify-between items-center mb-2">
-                                <span className="text-sm font-bold text-slate-500 uppercase">Username</span>
-                                <span className="font-mono font-bold text-slate-800">{createdCredentials.username}</span>
-                            </div>
+                        <div className="bg-slate-50 dark:bg-slate-900 p-6 rounded-2xl border border-slate-200 dark:border-slate-700 mb-8 space-y-4">
                             <div className="flex justify-between items-center">
-                                <span className="text-sm font-bold text-slate-500 uppercase">Password</span>
-                                <span className="font-mono font-bold text-slate-800">{createdCredentials.password}</span>
+                                <span className="text-xs font-bold text-slate-400 uppercase tracking-wider">Username</span>
+                                <span className="font-mono font-black text-slate-900 dark:text-white text-lg">{createdCredentials.username}</span>
+                            </div>
+                            <div className="w-full h-px bg-slate-200 dark:bg-slate-800"></div>
+                            <div className="flex justify-between items-center">
+                                <span className="text-xs font-bold text-slate-400 uppercase tracking-wider">Password</span>
+                                <span className="font-mono font-black text-blue-600 dark:text-blue-400 text-lg">{createdCredentials.password}</span>
                             </div>
                         </div>
 
-                        <div className="flex gap-3">
+                        <div className="flex gap-4">
                             <button
                                 onClick={copyToClipboard}
-                                className="flex-1 py-3 bg-blue-50 text-blue-600 font-bold rounded-xl hover:bg-blue-100 transition flex items-center justify-center gap-2"
+                                className="flex-1 py-3 bg-white dark:bg-slate-700 text-slate-700 dark:text-white font-bold rounded-xl hover:bg-slate-50 dark:hover:bg-slate-600 transition flex items-center justify-center gap-2 border border-slate-200 dark:border-slate-600 shadow-sm"
                             >
                                 <Copy className="w-4 h-4" /> Copy
                             </button>
                             <button
                                 onClick={() => setShowSuccessPopup(false)}
-                                className="flex-1 py-3 bg-blue-600 text-white font-bold rounded-xl hover:bg-blue-700 transition"
+                                className="flex-1 py-3 bg-blue-600 text-white font-bold rounded-xl hover:bg-blue-700 transition shadow-lg shadow-blue-500/30"
                             >
-                                OK
+                                Done
                             </button>
                         </div>
                     </div>
@@ -152,23 +175,27 @@ export default function PageAdminDoctors() {
             )}
 
             <div className="mb-8">
-                <h1 className="text-2xl font-bold text-white">Team Management</h1>
-                <p className="text-slate-400">Create and manage accounts for Doctors and Staff.</p>
+                <h1 className="text-3xl font-black text-slate-900 dark:text-white">Team Management</h1>
+                <p className="text-slate-500 dark:text-slate-400 mt-2 font-medium">Create and manage accounts for Doctors and Staff.</p>
             </div>
 
-            {/* Tabs */}
-            <div className="flex gap-4 mb-8 border-b border-slate-800">
+            {/* Modern Tab Switcher */}
+            <div className="flex p-1 bg-white dark:bg-slate-800 rounded-2xl w-fit shadow-sm border border-slate-200 dark:border-slate-700 mb-8">
                 <button
                     onClick={() => setActiveTab("doctor")}
-                    className={`pb-3 px-4 font-bold flex items-center gap-2 transition-colors ${activeTab === 'doctor' ? 'text-blue-400 border-b-2 border-blue-400' : 'text-slate-400 hover:text-slate-200'}`}
+                    className={`px-6 py-3 rounded-xl font-bold flex items-center gap-2 transition-all ${activeTab === 'doctor'
+                        ? 'bg-blue-600 text-white shadow-md'
+                        : 'text-slate-500 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-700'}`}
                 >
-                    <Stethoscope className="w-5 h-5" /> Doctors
+                    <Stethoscope className="w-4 h-4" /> Doctors
                 </button>
                 <button
                     onClick={() => setActiveTab("staff")}
-                    className={`pb-3 px-4 font-bold flex items-center gap-2 transition-colors ${activeTab === 'staff' ? 'text-purple-400 border-b-2 border-purple-400' : 'text-slate-400 hover:text-slate-200'}`}
+                    className={`px-6 py-3 rounded-xl font-bold flex items-center gap-2 transition-all ${activeTab === 'staff'
+                        ? 'bg-purple-600 text-white shadow-md'
+                        : 'text-slate-500 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-700'}`}
                 >
-                    <Clipboard className="w-5 h-5" /> Staff
+                    <Clipboard className="w-4 h-4" /> Staff
                 </button>
             </div>
 
@@ -176,72 +203,142 @@ export default function PageAdminDoctors() {
 
                 {/* --- LEFT: REGISTRATION FORM --- */}
                 <div className="lg:col-span-1">
-                    <div className="bg-slate-900/50 backdrop-blur-md p-6 rounded-2xl border border-slate-800 shadow-sm sticky top-6">
-                        <h3 className="font-bold text-white mb-6 flex items-center gap-2">
-                            <div className={`p-2 rounded-lg ${activeTab === 'doctor' ? 'bg-blue-500/10 text-blue-400' : 'bg-purple-500/10 text-purple-400'}`}>
+                    <div className="bg-white dark:bg-slate-800 p-6 rounded-3xl shadow-sm border border-slate-200 dark:border-slate-700 sticky top-6">
+                        <h3 className="font-bold text-slate-900 dark:text-white mb-6 flex items-center gap-3 border-b border-slate-100 dark:border-slate-700 pb-4">
+                            <div className={`p-2 rounded-lg ${activeTab === 'doctor' ? 'bg-blue-100 dark:bg-blue-500/20 text-blue-600 dark:text-blue-400' : 'bg-purple-100 dark:bg-purple-500/20 text-purple-600 dark:text-purple-400'}`}>
                                 <UserPlus className="w-5 h-5" />
                             </div>
                             Add New {activeTab === 'doctor' ? 'Doctor' : 'Staff Member'}
                         </h3>
 
-                        <form onSubmit={handleSubmit} className="space-y-4">
+                        <form ref={formRef} onSubmit={handleSubmit} className="space-y-4">
 
-                            {/* First Name */}
-                            <div>
-                                <label className="block text-xs font-bold text-slate-400 uppercase mb-1">First Name</label>
-                                <input
-                                    type="text"
-                                    required
-                                    className="w-full p-3 bg-slate-800 border border-slate-700 rounded-xl outline-none focus:ring-2 focus:ring-blue-500 transition text-white placeholder-slate-500"
-                                    placeholder="e.g. Rahul"
-                                    value={formData.firstName}
-                                    onChange={e => setFormData({ ...formData, firstName: e.target.value })}
-                                />
+                            <div className="grid grid-cols-2 gap-3">
+                                <div>
+                                    <label className="block text-xs font-bold text-slate-400 uppercase mb-1 ml-1">First Name</label>
+                                    <input
+                                        type="text"
+                                        required
+                                        className="w-full p-3 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-600 rounded-xl outline-none focus:ring-2 focus:ring-blue-500 transition text-slate-900 dark:text-white placeholder-slate-400 font-medium"
+                                        placeholder="e.g. Rahul"
+                                        value={formData.firstName}
+                                        onChange={e => setFormData({ ...formData, firstName: e.target.value })}
+                                    />
+                                </div>
+                                <div>
+                                    <label className="block text-xs font-bold text-slate-400 uppercase mb-1 ml-1">Last Name</label>
+                                    <input
+                                        type="text"
+                                        required
+                                        className="w-full p-3 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-600 rounded-xl outline-none focus:ring-2 focus:ring-blue-500 transition text-slate-900 dark:text-white placeholder-slate-400 font-medium"
+                                        placeholder="e.g. Patil"
+                                        value={formData.lastName}
+                                        onChange={e => setFormData({ ...formData, lastName: e.target.value })}
+                                    />
+                                </div>
                             </div>
 
-                            {/* Last Name */}
-                            <div>
-                                <label className="block text-xs font-bold text-slate-400 uppercase mb-1">Last Name</label>
-                                <input
-                                    type="text"
-                                    required
-                                    className="w-full p-3 bg-slate-800 border border-slate-700 rounded-xl outline-none focus:ring-2 focus:ring-blue-500 transition text-white placeholder-slate-500"
-                                    placeholder="e.g. Patil"
-                                    value={formData.lastName}
-                                    onChange={e => setFormData({ ...formData, lastName: e.target.value })}
-                                />
-                            </div>
-
-                            {/* Specialization (Doctors Only) */}
                             {activeTab === 'doctor' && (
-                                <div className="animate-fade-in-up">
-                                    <label className="block text-xs font-bold text-slate-400 uppercase mb-1">Specialization</label>
-                                    <div className="relative">
-                                        <Briefcase className="absolute top-3.5 left-3 w-4 h-4 text-slate-500" />
+                                <div className="space-y-4 animate-fade-in-up">
+                                    <div>
+                                        <label className="block text-xs font-bold text-slate-400 uppercase mb-1 ml-1">Specialization</label>
+                                        <div className="relative group">
+                                            <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                                                <Briefcase className="w-4 h-4 text-slate-400 group-focus-within:text-blue-500 transition-colors" />
+                                            </div>
+                                            <input
+                                                type="text"
+                                                className="w-full pl-10 p-3 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-600 rounded-xl outline-none focus:ring-2 focus:ring-blue-500 transition text-slate-900 dark:text-white placeholder-slate-400 font-medium"
+                                                placeholder="e.g. Cardiologist"
+                                                value={formData.specialization}
+                                                onChange={e => setFormData({ ...formData, specialization: e.target.value })}
+                                            />
+                                        </div>
+                                    </div>
+
+                                    <div>
+                                        <label className="block text-xs font-bold text-slate-400 uppercase mb-1 ml-1">Qualification</label>
                                         <input
                                             type="text"
-                                            className="w-full pl-10 p-3 bg-slate-800 border border-slate-700 rounded-xl outline-none focus:ring-2 focus:ring-blue-500 transition text-white placeholder-slate-500"
-                                            placeholder="e.g. Cardiologist"
-                                            value={formData.specialization}
-                                            onChange={e => setFormData({ ...formData, specialization: e.target.value })}
+                                            className="w-full p-3 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-600 rounded-xl outline-none focus:ring-2 focus:ring-blue-500 transition text-slate-900 dark:text-white placeholder-slate-400 font-medium"
+                                            placeholder="e.g. MBBS, MD"
+                                            value={formData.qualification || ''}
+                                            onChange={e => setFormData({ ...formData, qualification: e.target.value })}
                                         />
+                                    </div>
+
+                                    <div>
+                                        <label className="block text-xs font-bold text-slate-400 uppercase mb-1 ml-1">Experience</label>
+                                        <input
+                                            type="text"
+                                            className="w-full p-3 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-600 rounded-xl outline-none focus:ring-2 focus:ring-blue-500 transition text-slate-900 dark:text-white placeholder-slate-400 font-medium"
+                                            placeholder="e.g. 10+ Years"
+                                            value={formData.experience || ''}
+                                            onChange={e => setFormData({ ...formData, experience: e.target.value })}
+                                        />
+                                    </div>
+
+                                    <div>
+                                        <label className="block text-xs font-bold text-slate-400 uppercase mb-1 ml-1">Hospital Name</label>
+                                        <input
+                                            type="text"
+                                            className="w-full p-3 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-600 rounded-xl outline-none focus:ring-2 focus:ring-blue-500 transition text-slate-900 dark:text-white placeholder-slate-400 font-medium"
+                                            placeholder="Default: Omisha Clinic"
+                                            value={formData.hospitalName || ''}
+                                            onChange={e => setFormData({ ...formData, hospitalName: e.target.value })}
+                                        />
+                                    </div>
+
+                                    <div>
+                                        <label className="block text-xs font-bold text-slate-400 uppercase mb-1 ml-1">Consultation Fee (₹)</label>
+                                        <input
+                                            type="number"
+                                            className="w-full p-3 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-600 rounded-xl outline-none focus:ring-2 focus:ring-blue-500 transition text-slate-900 dark:text-white placeholder-slate-400 font-medium"
+                                            placeholder="Default: 500"
+                                            value={formData.consultationFee || ''}
+                                            onChange={e => setFormData({ ...formData, consultationFee: e.target.value })}
+                                        />
+                                    </div>
+
+                                    <div>
+                                        <label className="block text-xs font-bold text-slate-400 uppercase mb-1 ml-1">Photo Upload</label>
+                                        <div className="flex items-center gap-4">
+                                            <input
+                                                type="file"
+                                                ref={fileInputRef}
+                                                className="w-full p-3 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-600 rounded-xl outline-none focus:ring-2 focus:ring-blue-500 transition text-slate-900 dark:text-white font-medium file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100"
+                                                accept="image/*"
+                                                onChange={e => {
+                                                    const file = e.target.files[0];
+                                                    if (file) {
+                                                        setFormData({ ...formData, photo: file });
+                                                        setPhotoPreview(URL.createObjectURL(file));
+                                                    }
+                                                }}
+                                            />
+                                            {photoPreview && (
+                                                <div className="w-12 h-12 rounded-full overflow-hidden border-2 border-slate-200 dark:border-slate-600 shrink-0">
+                                                    <img src={photoPreview} alt="Preview" className="w-full h-full object-cover" />
+                                                </div>
+                                            )}
+                                        </div>
                                     </div>
                                 </div>
                             )}
 
-                            {/* Mobile */}
                             <div>
-                                <label className="block text-xs font-bold text-slate-400 uppercase mb-1">Mobile Number</label>
-                                <div className="relative">
-                                    <Phone className="absolute top-3.5 left-3 w-4 h-4 text-slate-500" />
+                                <label className="block text-xs font-bold text-slate-400 uppercase mb-1 ml-1">Mobile Number</label>
+                                <div className="relative group">
+                                    <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                                        <Phone className="w-4 h-4 text-slate-400 group-focus-within:text-blue-500 transition-colors" />
+                                    </div>
                                     <input
                                         type="tel"
                                         required
-                                        className="w-full pl-10 p-3 bg-slate-800 border border-slate-700 rounded-xl outline-none focus:ring-2 focus:ring-blue-500 transition text-white placeholder-slate-500"
+                                        className="w-full pl-10 p-3 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-600 rounded-xl outline-none focus:ring-2 focus:ring-blue-500 transition text-slate-900 dark:text-white placeholder-slate-400 font-medium"
                                         placeholder="10-digit number"
                                         value={formData.mobile}
                                         onChange={e => {
-                                            // Only allow numbers
                                             const val = e.target.value.replace(/\D/g, '');
                                             if (val.length <= 10) {
                                                 setFormData({ ...formData, mobile: val });
@@ -249,23 +346,23 @@ export default function PageAdminDoctors() {
                                         }}
                                     />
                                 </div>
-                                <p className="text-[10px] text-slate-500 mt-1 text-right">{formData.mobile.length}/10</p>
+                                <p className="text-[10px] text-slate-400 mt-1 text-right font-mono">{formData.mobile.length}/10</p>
                             </div>
 
-                            <div className="bg-blue-500/10 p-3 rounded-xl border border-blue-500/20 text-xs text-blue-400 mb-2">
+                            <div className="bg-blue-50 dark:bg-blue-500/10 p-4 rounded-xl border border-blue-100 dark:border-blue-500/20 text-xs text-blue-700 dark:text-blue-300">
                                 <p className="font-bold mb-1">Note:</p>
-                                <ul className="list-disc list-inside space-y-1">
+                                <ul className="list-disc list-inside space-y-1 opacity-80">
                                     <li>Username will be auto-generated.</li>
-                                    <li>Default password: <strong>123456</strong></li>
+                                    <li>Default password: <strong className="font-mono">123456</strong></li>
                                 </ul>
                             </div>
 
                             <button
                                 type="submit"
                                 disabled={loading}
-                                className={`w-full py-3 text-white font-bold rounded-xl shadow-lg flex justify-center transition-transform active:scale-95 ${activeTab === 'doctor' ? 'bg-blue-600 hover:bg-blue-700' : 'bg-purple-600 hover:bg-purple-700'}`}
+                                className={`w-full py-3.5 text-white font-bold rounded-xl shadow-lg flex justify-center items-center gap-2 transition-transform active:scale-95 ${activeTab === 'doctor' ? 'bg-blue-600 hover:bg-blue-700 shadow-blue-500/30' : 'bg-purple-600 hover:bg-purple-700 shadow-purple-500/30'} `}
                             >
-                                {loading ? "Creating..." : `Register ${activeTab === 'doctor' ? 'Doctor' : 'Staff'}`}
+                                {loading ? <Loader className="animate-spin w-5 h-5" /> : `Register ${activeTab === 'doctor' ? 'Doctor' : 'Staff'}`}
                             </button>
 
                         </form>
@@ -274,30 +371,33 @@ export default function PageAdminDoctors() {
 
                 {/* --- RIGHT: EXISTING TEAM LIST --- */}
                 <div className="lg:col-span-2">
-                    <div className="bg-slate-900/50 backdrop-blur-md rounded-2xl border border-slate-800 shadow-sm overflow-hidden min-h-[500px] flex flex-col">
-                        <div className="p-6 border-b border-slate-800 bg-slate-900/50 flex justify-between items-center">
-                            <h3 className="font-bold text-white flex items-center gap-2">
-                                <Users className="w-5 h-5" /> Active {activeTab === 'doctor' ? 'Doctors' : 'Staff'}
+                    <div className="bg-white dark:bg-slate-800 rounded-3xl shadow-sm border border-slate-200 dark:border-slate-700 overflow-hidden min-h-[600px] flex flex-col">
+                        <div className="p-6 border-b border-slate-100 dark:border-slate-700 bg-slate-50 dark:bg-slate-900/50 flex justify-between items-center">
+                            <h3 className="font-bold text-slate-900 dark:text-white flex items-center gap-2">
+                                <Users className="w-5 h-5 text-slate-500" /> Active {activeTab === 'doctor' ? 'Doctors' : 'Staff'}
                             </h3>
-                            <button onClick={fetchTeam} className="text-blue-400 hover:bg-blue-500/10 p-2 rounded-full transition">
+                            <button
+                                onClick={fetchTeam}
+                                className="p-2 text-slate-400 hover:text-blue-600 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-700 rounded-lg transition"
+                                title="Refresh List"
+                            >
                                 <RefreshCw className="w-4 h-4" />
                             </button>
                         </div>
 
-                        <div className="flex-1 overflow-y-auto p-4 space-y-3">
+                        <div className="flex-1 overflow-y-auto p-4 space-y-3 custom-scrollbar">
                             {teamList.length > 0 ? (
                                 teamList.map((user) => (
-                                    <div key={user._id} className="p-4 flex flex-col md:flex-row md:items-center justify-between bg-slate-800/50 border border-slate-700 rounded-xl hover:shadow-md transition-all group">
-                                        <div className="flex items-center gap-4 mb-4 md:mb-0">
-                                            <div className={`h-12 w-12 rounded-full flex items-center justify-center font-bold text-xl border ${activeTab === 'doctor' ? 'bg-blue-500/10 text-blue-400 border-blue-500/20' : 'bg-purple-500/10 text-purple-400 border-purple-500/20'}`}>
+                                    <div key={user._id} className="relative p-4 flex flex-col sm:flex-row sm:items-center justify-between bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-2xl hover:shadow-md hover:border-blue-300 dark:hover:border-blue-700 transition-all group gap-4">
+                                        <div className="flex items-center gap-4 pr-8 sm:pr-0">
+                                            <div className={`h-12 w-12 rounded-xl flex items-center justify-center font-black text-xl border ${activeTab === 'doctor' ? 'bg-blue-50 dark:bg-blue-500/10 text-blue-600 dark:text-blue-400 border-blue-100 dark:border-blue-500/20' : 'bg-purple-50 dark:bg-purple-500/10 text-purple-600 dark:text-purple-400 border-purple-100 dark:border-purple-500/20'} `}>
                                                 {user.name.charAt(0).toUpperCase()}
                                             </div>
                                             <div>
-                                                <h4 className="font-bold text-white text-lg">{user.name}</h4>
-                                                <div className="flex items-center gap-4 text-sm text-slate-400">
-                                                    {/* Specialization only for doctors */}
+                                                <h4 className="font-bold text-slate-900 dark:text-white text-lg group-hover:text-blue-600 dark:group-hover:text-blue-400 transition-colors">{user.name}</h4>
+                                                <div className="flex items-center gap-4 text-xs font-medium text-slate-500 dark:text-slate-400 mt-0.5">
                                                     {user.role === 'doctor' && (
-                                                        <span className="flex items-center gap-1">
+                                                        <span className="flex items-center gap-1 bg-slate-100 dark:bg-slate-800 px-2 py-0.5 rounded">
                                                             <Briefcase className="w-3 h-3" /> {user.specialization || "General"}
                                                         </span>
                                                     )}
@@ -308,25 +408,28 @@ export default function PageAdminDoctors() {
                                             </div>
                                         </div>
 
-                                        <div className="flex items-center gap-3">
+                                        <div className="absolute top-2 right-2 sm:static flex items-center gap-3">
                                             {/* Availability only for Doctors */}
                                             {user.role === 'doctor' && (
-                                                <div className="text-right mr-4">
-                                                    <p className="text-[10px] font-bold text-slate-400 uppercase">Availability</p>
-                                                    <p className={`text-xs font-bold ${user.availabilityStatus === 'Available' ? 'text-emerald-400' : 'text-slate-500'}`}>
+                                                <div className="text-right mr-4 block">
+                                                    <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider hidden sm:block">Status</p>
+                                                    <p className={`text-xs font-bold ${user.availabilityStatus === 'Available' ? 'text-emerald-500' : 'text-slate-400'} `}>
                                                         {user.availabilityStatus || "Offline"}
                                                     </p>
                                                 </div>
                                             )}
-                                            {/* Delete button placeholder - Add functionality if needed */}
-                                            <div className="h-8 w-8 bg-slate-800 rounded-full"></div>
+
+                                            {/* More Actions Placeholder */}
+                                            <button className="p-2 text-slate-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/10 rounded-lg transition">
+                                                <X className="w-5 h-5" />
+                                            </button>
                                         </div>
                                     </div>
                                 ))
                             ) : (
-                                <div className="h-full flex flex-col items-center justify-center text-slate-500">
-                                    <Users className="w-12 h-12 mb-2 opacity-20" />
-                                    <p>No {activeTab} accounts found.</p>
+                                <div className="h-full flex flex-col items-center justify-center text-slate-400">
+                                    <Users className="w-16 h-16 mb-4 opacity-20" />
+                                    <p className="text-lg font-medium">No {activeTab} accounts found.</p>
                                 </div>
                             )}
                         </div>

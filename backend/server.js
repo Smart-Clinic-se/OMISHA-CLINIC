@@ -5,6 +5,12 @@ const cors = require('cors');
 const http = require('http');
 const { Server } = require('socket.io');
 
+// === NEW SECURITY DEPENDENCIES ===
+const helmet = require('helmet');
+const rateLimit = require('express-rate-limit');
+const mongoSanitize = require('express-mongo-sanitize');
+const compression = require('compression');
+
 const app = express();
 const server = http.createServer(app);
 
@@ -36,12 +42,17 @@ const io = new Server(server, {
 });
 
 // ==================== MIDDLEWARE ====================
+// 0. CORS (MUST be first)
 app.use(
   cors({
     origin: (origin, callback) => {
-      if (!origin || ALLOWED_ORIGINS.includes(origin)) {
+      // Allow requests with no origin (like mobile apps or curl requests)
+      if (!origin) return callback(null, true);
+
+      if (ALLOWED_ORIGINS.includes(origin) || origin.startsWith('http://localhost') || origin.startsWith('http://127.0.0.1')) {
         callback(null, true);
       } else {
+        console.error('Blocked by CORS:', origin);
         callback(new Error('Not allowed by CORS'));
       }
     },
@@ -49,8 +60,49 @@ app.use(
   })
 );
 
+// 1. Secure Headers
+app.use(helmet());
+
+// 2. Compress Responses
+app.use(compression());
+
+// 3. Rate Limiting (1000 requests per 15 minutes)
+const limiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 5000, // [UPDATED] Increased for Live Search
+  message: { message: "Too many requests, please try again later." },
+  standardHeaders: true,
+  legacyHeaders: false,
+});
+app.use('/api', limiter);
+
+// 4. Sanitize Input (MOVED BELOW BODY PARSERS)
+// app.use(mongoSanitize());
+
+
 app.use(express.json({ limit: '50mb' }));
 app.use(express.urlencoded({ extended: true, limit: '50mb' }));
+
+// 5. Sanitize Input (Custom Implementation for Express 5)
+app.use((req, res, next) => {
+  const sanitize = (obj) => {
+    if (obj instanceof Object) {
+      for (const key in obj) {
+        if (/^\$/.test(key)) {
+          delete obj[key];
+        } else {
+          sanitize(obj[key]);
+        }
+      }
+    }
+    return obj;
+  };
+
+  if (req.body) sanitize(req.body);
+  if (req.params) sanitize(req.params);
+  // req.query is read-only in Express 5, so we rely on Mongoose's casting for query safety
+  next();
+});
 
 app.use((req, res, next) => {
   req.io = io;
@@ -58,6 +110,14 @@ app.use((req, res, next) => {
 });
 
 // ==================== DATABASE ====================
+// STARTUP CHECK: Ensure critical variables are present
+const requiredEnv = ['MONGO_URI', 'JWT_SECRET'];
+const missingEnv = requiredEnv.filter(key => !process.env[key]);
+
+if (missingEnv.length > 0) {
+  console.error(`❌ FATAL ERROR: Missing Environment Variables: ${missingEnv.join(', ')}`);
+  process.exit(1);
+}
 if (!process.env.MONGO_URI) {
   console.error("FATAL ERROR: MONGO_URI missing in .env");
   process.exit(1);
@@ -91,6 +151,9 @@ global.io = io;
 app.use('/api/auth', require('./routes/auth'));
 app.use('/api/queue', require('./routes/queue'));
 app.use('/api/medical', require('./routes/medical'));
+app.use('/api/users', require('./routes/users'));
+app.use('/api/audit', require('./routes/audit'));
+app.use('/api/medicines', require('./routes/medicines')); // [NEW] Medicine Search
 
 // Health Check
 app.get('/health', (req, res) => {

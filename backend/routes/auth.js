@@ -1,45 +1,45 @@
-const router = require('express').Router();
+const express = require('express');
+const router = express.Router();
+const bcrypt = require('bcryptjs');
+const jwt = require('jsonwebtoken');
 const User = require('../models/User');
 const AuditLog = require('../models/AuditLog');
-const jwt = require('jsonwebtoken');
-const bcrypt = require('bcryptjs');
+const { getUserFromToken } = require('../middleware/authMiddleware');
+const multer = require('multer');
+const { storage } = require('../config/cloudinary');
+const upload = multer({ storage });
 
-// Helper: Generate Internal System ID
+// === HELPER FUNCTIONS ===
 const generateSystemId = (role) => {
-  const prefix = role === 'doctor' ? 'DOC' : role === 'staff' ? 'STF' : 'PAT';
-  return `${prefix}-${Date.now().toString().slice(-6)}`;
+  const prefix = role ? role.toUpperCase().substring(0, 3) : 'USR';
+  const random = Math.floor(10000 + Math.random() * 90000);
+  return `${prefix}-${random}`;
 };
 
-// === HELPER: Manually Extract User from Token (Since we have no global middleware) ===
-const getUserFromToken = (req) => {
-  const token = req.header('Authorization')?.replace('Bearer ', '');
-  if (!token) return null;
-  try {
-    return jwt.verify(token, process.env.JWT_SECRET || "fallback_secret");
-  } catch (err) {
-    return null;
-  }
+const generateUsername = (firstName, lastName) => {
+  if (!firstName || !lastName) return '';
+  return `${firstName.toLowerCase()}_${lastName.toLowerCase()}`;
 };
 
-// === 1. REGISTER PATIENT (Public) ===
+const generatePassword = () => {
+  return Math.random().toString(36).slice(-8);
+};
+
+// === 1. REGISTER PATIENT ===
 router.post('/register', async (req, res) => {
   try {
-    const { firstName, lastName, mobile, password, age, gender, address, bloodGroup, securityQuestion, securityAnswer } = req.body;
+    const { firstName, lastName, mobile, password, dob, gender, address, bloodGroup, securityQuestion, securityAnswer } = req.body;
 
-    if (!firstName || !lastName || !mobile || !password || !bloodGroup) {
-      return res.status(400).json({ message: "Required fields missing." });
-    }
+    // Check if user exists
+    let user = await User.findOne({ mobile });
+    if (user) return res.status(400).json({ message: "User already exists with this mobile number." });
 
-    if (!securityQuestion || !securityAnswer) {
-      return res.status(400).json({ message: "Security Question and Answer are required." });
-    }
-
-    const existingMobile = await User.findOne({ mobile });
-    if (existingMobile) return res.status(409).json({ message: "Mobile number already registered." });
-
+    // Generate Username: firstname_lastname
     let baseUsername = `${firstName.trim().toLowerCase()}_${lastName.trim().toLowerCase()}`;
     let finalUsername = baseUsername;
     let counter = 1;
+
+    // Check for duplicate username and append counter if needed
     while (await User.findOne({ username: finalUsername })) {
       finalUsername = `${baseUsername}${counter}`;
       counter++;
@@ -51,7 +51,7 @@ router.post('/register', async (req, res) => {
       mobile,
       password,
       role: 'patient',
-      age,
+      dob,
       gender,
       address,
       bloodGroup,
@@ -135,7 +135,8 @@ router.post('/login', async (req, res) => {
         availabilityStatus: user.availabilityStatus,
         systemId: user.systemId,
         bloodGroup: user.bloodGroup,
-        securityQuestion: user.securityQuestion // Send back so frontend knows if it exists
+        securityQuestion: user.securityQuestion, // Send back so frontend knows if it exists
+        themePreference: user.themePreference
       }
     });
   } catch (err) {
@@ -240,9 +241,17 @@ router.post('/change-password', async (req, res) => {
 });
 
 // === 6. REGISTER STAFF/DOCTOR (Admin Only) ===
-router.post('/register-staff', async (req, res) => {
+router.post('/register-staff', upload.single('photo'), async (req, res) => {
   try {
-    const { firstName, lastName, mobile, role, specialization } = req.body;
+    console.log("Register Staff Request Body:", req.body);
+    console.log("Register Staff Request File:", req.file);
+
+    const { firstName, lastName, mobile, role, specialization, qualification, experience, hospitalName } = req.body;
+    let photo = req.body.photo;
+
+    if (req.file) {
+      photo = req.file.path;
+    }
 
     if (!firstName || !lastName || !mobile || !role) {
       return res.status(400).json({ message: "Required fields missing." });
@@ -269,6 +278,10 @@ router.post('/register-staff', async (req, res) => {
       password: "123456", // Default Password
       role,
       specialization: role === 'doctor' ? specialization : '',
+      qualification: role === 'doctor' ? qualification : '',
+      experience: role === 'doctor' ? experience : '',
+      hospitalName: role === 'doctor' ? (hospitalName || 'Omisha Clinic') : '',
+      photo: role === 'doctor' ? photo : '',
       availabilityStatus: role === 'doctor' ? 'Not Available' : undefined,
       systemId: generateSystemId(role),
       securityQuestion: null,
@@ -288,7 +301,7 @@ router.post('/register-staff', async (req, res) => {
     });
   } catch (err) {
     console.error("Register Staff Error:", err);
-    res.status(500).json({ message: "Failed to register user." });
+    res.status(500).json({ message: "Failed to register user.", error: err.message });
   }
 });
 
@@ -296,7 +309,7 @@ router.post('/register-staff', async (req, res) => {
 router.get('/doctors', async (req, res) => {
   try {
     const doctors = await User.find({ role: 'doctor' })
-      .select('name specialization availabilityStatus breakUntil weeklySchedule');
+      .select('name specialization qualification experience hospitalName photo gender availabilityStatus breakUntil weeklySchedule consultationFee');
     res.json(doctors);
   } catch (err) {
     res.status(500).json({ message: "Failed to fetch doctors." });

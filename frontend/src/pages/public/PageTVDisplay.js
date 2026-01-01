@@ -1,186 +1,217 @@
-import React, { useState, useEffect, useRef } from "react";
+import React, { useState, useEffect } from "react";
+import { Link } from "react-router-dom";
 import { getQueueAPI, listenToQueueUpdates } from "../../api";
-import { Activity } from "lucide-react";
+import { Activity, Clock, User, ArrowRight, Home } from "lucide-react";
+import { playAnnouncementSound } from "../../utils/audio";
 
 export default function PageTVDisplay() {
     const [queues, setQueues] = useState({});
-    const audioRef = useRef(new Audio("https://assets.mixkit.co/sfx/preview/mixkit-airport-announcement-ding-1569.mp3"));
+    const [currentTime, setCurrentTime] = useState(new Date());
 
-    // --- LOGIC STARTS (UNCHANGED) ---
+    // --- DATA FETCHING ---
     const fetchAll = async () => {
         try {
-            // Fetch ALL active queue items for today
             const res = await getQueueAPI({ allStatus: true });
-
-            // Access res.data.data (Array)
             const queueData = res.data.data || [];
+            console.log("TV Fetch Data:", queueData);
 
-            // Group by Doctor
-            const grouped = queueData.reduce((acc, p) => {
-                if (!p.assignedTo) return acc; // Safety check
+            const newGrouped = {};
 
-                const docName = p.assignedTo.name;
-                const docSpecialization = p.assignedTo.specialization || "General Physician";
+            queueData.forEach(item => {
+                const doc = item.assignedTo;
 
-                if (!acc[docName]) {
-                    acc[docName] = {
+                // Fallback for missing/deleted doctor references
+                let docName = (doc && doc.name) ? doc.name : "Unknown Doctor";
+                let docSpec = (doc && doc.specialization) ? doc.specialization : "General";
+                let docStatus = (doc && doc.availabilityStatus) ? doc.availabilityStatus : "Available";
+
+                if (doc && !doc.name) {
+                    // If doc is just an ID (populate failed)
+                    docName = "Dr. " + String(doc).slice(-6);
+                }
+
+                if (!newGrouped[docName]) {
+                    newGrouped[docName] = {
+                        specialization: docSpec,
+                        status: docStatus,
                         current: null,
-                        waiting: [],
-                        specialization: docSpecialization,
-                        // Use the new availabilityStatus field
-                        status: p.assignedTo.availabilityStatus || 'Available',
-                        breakUntil: p.assignedTo.breakUntil
+                        waiting: []
                     };
                 }
 
-                if (p.status === 'In-Cabin') acc[docName].current = p;
-                if (p.status === 'Waiting') acc[docName].waiting.push(p);
+                if (doc && doc.availabilityStatus) {
+                    newGrouped[docName].status = doc.availabilityStatus;
+                }
 
-                return acc;
-            }, {});
-            setQueues(grouped);
+                if (item.status === 'In-Cabin') {
+                    newGrouped[docName].current = item;
+                } else if (item.status === 'Waiting') {
+                    newGrouped[docName].waiting.push(item);
+                }
+            });
+
+            console.log("Grouped Queue:", newGrouped);
+            setQueues(newGrouped);
         } catch (err) {
-            console.error("TV Fetch Error:", err);
+            console.error("TV Error:", err);
         }
     };
 
     useEffect(() => {
         fetchAll();
-
         const cleanup = listenToQueueUpdates((payload) => {
             fetchAll();
-
-            // Play Sound only if a patient enters cabin
             if (payload.type === 'UPDATE' && payload.calledToken) {
-                audioRef.current.currentTime = 0;
-                audioRef.current.play().catch(e => console.log("Audio autoplay blocked:", e));
+                playAnnouncementSound();
             }
         });
 
-        // Fallback polling every 10s to ensure screen is never stale
-        const interval = setInterval(fetchAll, 10000);
+        const timeInterval = setInterval(() => setCurrentTime(new Date()), 1000);
+        const pollInterval = setInterval(fetchAll, 10000);
 
         return () => {
             cleanup();
-            clearInterval(interval);
+            clearInterval(timeInterval);
+            clearInterval(pollInterval);
         };
     }, []);
-    // --- LOGIC ENDS ---
 
     return (
-        // STYLING FIX: Changed overflow-hidden to overflow-y-auto for mobile scrolling
-        <div className="min-h-screen bg-slate-950 text-white p-4 lg:p-8 font-sans overflow-y-auto">
+        <div className="min-h-screen bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-white font-sans p-3 overflow-hidden flex flex-col transition-colors duration-300">
 
-            {/* Top Bar - STYLING FIX: flex-col for mobile, flex-row for desktop */}
-            <div className="flex flex-col md:flex-row justify-between items-center mb-6 md:mb-8 border-b border-slate-800 pb-4 gap-6 md:gap-0">
-                
-                {/* Logo Section */}
-                <div className="flex items-center gap-3 md:gap-4">
-                    <div className="p-2 md:p-3 bg-blue-600 rounded-xl shadow-lg shadow-blue-900/50">
-                        {/* STYLING FIX: Smaller icon on mobile */}
-                        <Activity className="w-6 h-6 md:w-8 md:h-8 text-white" />
+            {/* --- BACK TO HOME --- */}
+            <Link to="/" className="inline-flex items-center gap-2 text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white transition-colors font-bold mb-4 w-fit">
+                <Home className="w-4 h-4 md:w-5 md:h-5" />
+                <span className="text-xs md:text-base">Back to Home</span>
+            </Link>
+
+            {/* --- HEADER --- */}
+            {/* Restored flex-row but with tighter spacing and smaller fonts on mobile */}
+            <header className="flex flex-row justify-between items-end mb-3 border-b-2 border-slate-200 dark:border-slate-800 pb-3">
+                <div className="flex items-center gap-2 md:gap-2">
+                    <div className="p-3 md:p-3 bg-blue-600 rounded-lg shadow-md">
+                        <Activity className="w-4 h-4 md:w-5 md:h-5 text-white" />
                     </div>
                     <div>
-                        {/* STYLING FIX: Smaller text on mobile (text-2xl) vs desktop (text-4xl) */}
-                        <h1 className="text-2xl md:text-4xl font-black tracking-tight text-transparent bg-clip-text bg-gradient-to-r from-blue-400 to-cyan-300">
-                            OMISHA CLINIC
+                        <h1 className="text-base md:text-xl font-black tracking-tight text-slate-900 dark:text-white uppercase leading-none md:leading-normal p-1">
+                            OMISHA <span className="text-blue-600 dark:text-blue-400">CLINIC</span>
                         </h1>
-                        <p className="text-slate-400 text-sm md:text-lg tracking-wider font-medium">Live Queue Status</p>
+                        <p className="text-slate-500 dark:text-slate-400 text-[10px] md:text-sm font-bold tracking-widest uppercase p-1">
+                            Queue Display
+                        </p>
                     </div>
                 </div>
 
-                {/* Clock Section - STYLING FIX: Centered on mobile, Right aligned on desktop */}
-                <div className="text-center md:text-right">
-                    <p className="text-3xl md:text-5xl font-bold text-white tabular-nums tracking-tight">
-                        {new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                    </p>
-                    <p className="text-slate-500 text-sm md:text-xl font-medium mt-1">
-                        {new Date().toLocaleDateString(undefined, { weekday: 'long', month: 'long', day: 'numeric' })}
-                    </p>
+                <div className="text-right">
+                    <div className="text-base md:text-xl font-black tracking-tight text-slate-900 dark:text-white uppercase leading-none md:leading-normal p-1">
+                        {currentTime.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                    </div>
+                    <div className="text-slate-500 dark:text-slate-400 text-[10px] md:text-sm font-bold tracking-widest uppercase p-1">
+                        {currentTime.toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' })}
+                    </div>
                 </div>
-            </div>
+            </header>
 
-            {/* Queue Grid */}
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 md:gap-6">
+            {/* --- GRID --- */}
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3 flex-1 content-start">
 
                 {Object.keys(queues).length === 0 && (
-                    <div className="col-span-full flex flex-col items-center justify-center py-20 md:py-40 text-slate-600 animate-pulse">
-                        <Activity className="w-16 h-16 md:w-20 md:h-20 mb-4 opacity-20" />
-                        <p className="text-xl md:text-3xl font-light text-center">Waiting for queue to start...</p>
+                    <div className="col-span-full flex flex-col items-center justify-center h-96 opacity-50">
+                        <Activity className="w-16 h-16 mb-4 text-slate-400" />
+                        <p className="text-xl font-medium text-slate-500">System Standing By...</p>
                     </div>
                 )}
 
                 {Object.entries(queues).map(([doctor, data]) => (
-                    <div key={doctor} className="bg-slate-900/50 backdrop-blur-md rounded-3xl overflow-hidden border border-slate-800 shadow-2xl flex flex-col h-full relative group">
+                    <div key={doctor} className="bg-white dark:bg-slate-900 rounded-xl shadow-lg border border-slate-200 dark:border-slate-800 flex flex-col overflow-hidden h-full max-h-[350px]">
 
-                        {/* Doctor Header */}
-                        <div className="bg-slate-900/80 p-4 md:p-5 text-center border-b border-slate-800">
-                            <h2 className="text-xl md:text-2xl font-bold text-white truncate">Dr. {doctor}</h2>
-                            <div className="flex justify-center items-center gap-2 mt-2">
-                                <span className="text-cyan-400 text-[10px] md:text-xs uppercase tracking-widest font-bold px-2 py-1 bg-cyan-950/50 border border-cyan-900 rounded">
-                                    {data.specialization}
-                                </span>
-
-                                {/* Status Indicator */}
-                                {data.status === 'On Break' && (
-                                    <span className="bg-amber-500/20 text-amber-400 border border-amber-500/50 text-[10px] px-2 py-1 rounded font-bold animate-pulse">
-                                        ON BREAK
-                                    </span>
-                                )}
-                                {data.status === 'Not Available' && (
-                                    <span className="bg-red-500/20 text-red-400 border border-red-500/50 text-[10px] px-2 py-1 rounded font-bold">
-                                        OFFLINE
-                                    </span>
-                                )}
+                        {/* 1. Doctor Header */}
+                        <div className="p-4 bg-slate-100 dark:bg-slate-800/50 border-b border-slate-200 dark:border-slate-700 flex justify-between items-center">
+                            <div>
+                                <h2 className="text-sm font-bold text-slate-900 dark:text-white truncate max-w-[150px]">Dr. {doctor}</h2>
+                                <p className="text-xs font-bold text-slate-500 uppercase tracking-wider">{data.specialization}</p>
                             </div>
+
+                            {/* Status Badge */}
+                            {data.status === 'On Break' ? (
+                                <span className="px-3 py-1 bg-amber-100 text-amber-700 text-xs font-bold uppercase rounded border border-amber-200">On Break</span>
+                            ) : data.status === 'Not Available' ? (
+                                <span className="px-3 py-1 bg-red-100 text-red-700 text-xs font-bold uppercase rounded border border-red-200">Offline</span>
+                            ) : (
+                                <span className="px-3 py-1 bg-emerald-100 text-emerald-700 text-xs font-bold uppercase rounded border border-emerald-200">Active</span>
+                            )}
                         </div>
 
-                        {/* Now Serving - STYLING FIX: Adjust padding and text size for mobile */}
-                        <div className="p-6 md:p-8 text-center bg-gradient-to-b from-slate-800/50 to-slate-900/50 flex-1 flex flex-col justify-center relative">
-                            <p className="text-[10px] md:text-xs font-bold text-emerald-400 uppercase tracking-[0.2em] mb-4">NOW SERVING</p>
+                        {/* 2. Current Token (Hero) */}
+                        <div className="flex-1 flex flex-col justify-center items-center p-6 bg-white dark:bg-slate-900 relative">
+                            {/* Watermark Pattern */}
+                            <div className="absolute inset-0 opacity-[0.02] bg-[radial-gradient(#000_1px,transparent_1px)] dark:bg-[radial-gradient(#fff_1px,transparent_1px)] [background-size:12px_12px]"></div>
+
+                            <p className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-2">Now Serving</p>
+
                             {data.current ? (
-                                <div className="animate-in fade-in zoom-in duration-500">
-                                    <p className="text-6xl md:text-7xl font-black font-mono text-white tracking-tighter drop-shadow-2xl">
-                                        {data.current.tokenNumber}
-                                    </p>
-                                    <p className="text-lg md:text-xl text-slate-300 mt-4 font-medium truncate px-2">{data.current.patientName}</p>
+                                <div className="text-center relative z-10">
+                                    <div className="text-3xl font-black text-blue-600 dark:text-blue-400 tracking-tight truncate max-w-[250px] mx-auto">
+                                        {data.current.patientName}
+                                    </div>
+                                    <div className="mt-3 px-4 py-1.5 bg-slate-50 dark:bg-slate-800 rounded-full border border-slate-100 dark:border-slate-700 inline-block">
+                                        <p className="text-sm font-bold text-slate-700 dark:text-slate-200 font-mono">
+                                            Token: {data.current.tokenNumber}
+                                        </p>
+                                    </div>
                                 </div>
                             ) : (
-                                <div className="opacity-30">
-                                    <p className="text-5xl md:text-6xl font-mono text-slate-600">---</p>
-                                    <p className="text-xs md:text-sm text-slate-500 mt-4">Next patient please wait</p>
+                                <div className="text-center opacity-40">
+                                    <span className="text-5xl font-mono font-bold text-slate-300 dark:text-slate-700">--</span>
+                                    <p className="text-xs font-bold mt-2">Ready</p>
                                 </div>
                             )}
                         </div>
 
-                        {/* Up Next List */}
-                        <div className="bg-slate-950/50 p-4 border-t border-slate-800 backdrop-blur-sm">
-                            <div className="flex justify-between items-end mb-3 px-1">
-                                <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">Up Next</p>
-                                <span className="text-[10px] font-bold text-slate-600">{data.waiting.length} waiting</span>
+                        {/* 3. Up Next List (Compact) */}
+                        <div className="bg-slate-50 dark:bg-slate-950/50 border-t border-slate-200 dark:border-slate-800 p-4">
+                            <div className="flex justify-between items-center mb-2">
+                                <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Up Next</p>
+                                <span className="text-[10px] font-bold text-slate-500 bg-slate-200 dark:bg-slate-800 px-2 py-0.5 rounded">
+                                    {data.waiting.length} Waiting
+                                </span>
                             </div>
 
-                            <div className="space-y-2 min-h-[80px] md:min-h-[100px]">
+                            <div className="space-y-2 min-h-[80px]">
                                 {data.waiting.slice(0, 2).map((p) => (
-                                    <div key={p._id} className="flex justify-between items-center bg-slate-800/50 p-3 rounded-xl border border-slate-700/50">
-                                        <span className="font-mono text-lg md:text-xl font-bold text-yellow-400">{p.tokenNumber}</span>
-                                        <span className="text-slate-300 text-xs md:text-sm font-medium truncate max-w-[100px] md:max-w-[120px]">{p.patientName}</span>
+                                    <div key={p._id} className="flex justify-between items-center bg-white dark:bg-slate-900 p-2.5 rounded-lg border border-slate-200 dark:border-slate-700 shadow-sm">
+                                        <div className="flex items-center gap-3 overflow-hidden">
+                                            <span className="text-sm font-bold text-slate-900 dark:text-white truncate">{p.patientName}</span>
+                                            <span className="text-xs font-mono font-medium text-slate-500 dark:text-slate-400 shrink-0">#{p.tokenNumber}</span>
+                                        </div>
+                                        <ArrowRight className="w-3 h-3 text-slate-300" />
                                     </div>
                                 ))}
+
                                 {data.waiting.length === 0 && (
-                                    <div className="h-full flex items-center justify-center text-slate-600 italic text-xs">
-                                        No patients in queue
+                                    <div className="h-full flex items-center justify-center text-xs text-slate-400 italic py-4">
+                                        Queue is empty
                                     </div>
                                 )}
+
                                 {data.waiting.length > 2 && (
-                                    <p className="text-center text-slate-500 text-xs mt-2 font-medium">
-                                        +{data.waiting.length - 2} others in line
-                                    </p>
+                                    <div className="text-center pt-1">
+                                        <span className="text-[10px] font-bold text-slate-400">
+                                            +{data.waiting.length - 2} more patients
+                                        </span>
+                                    </div>
                                 )}
                             </div>
                         </div>
+
                     </div>
                 ))}
+            </div>
+
+            {/* Footer */}
+            <div className="mt-6 pt-4 border-t border-slate-200 dark:border-slate-800 flex justify-between text-xs font-bold text-slate-400 uppercase tracking-wider">
+                <span>Omisha Healthcare System</span>
+                <span>Secure • Real-time • {currentTime.getFullYear()}</span>
             </div>
         </div>
     );

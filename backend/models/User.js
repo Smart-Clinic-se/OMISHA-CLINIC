@@ -30,6 +30,29 @@ const UserSchema = new mongoose.Schema({
     required: true,
   },
 
+  // Personal Details
+  dob: {
+    type: Date,
+  },
+
+  // [NEW] Explicit Age Field (Fallback if DOB is missing)
+  storedAge: {
+    type: Number,
+  },
+
+  // Virtual Age is calculated below
+
+  gender: {
+    type: String,
+    enum: ['Male', 'Female', 'Other'],
+    trim: true
+  },
+
+  address: {
+    type: String,
+    trim: true
+  },
+
   // Contact info
   mobile: {
     type: String,
@@ -43,6 +66,11 @@ const UserSchema = new mongoose.Schema({
     enum: ['A+', 'A-', 'B+', 'B-', 'AB+', 'AB-', 'O+', 'O-', 'Unknown'],
     trim: true
   },
+
+  // Vitals History (Snapshot)
+  lastHeight: { type: Number },
+  lastWeight: { type: Number },
+  lastVitalsDate: { type: Date },
 
   // Internal System ID
   systemId: {
@@ -63,6 +91,35 @@ const UserSchema = new mongoose.Schema({
 
   // === DOCTOR SPECIFIC FIELDS ===
   specialization: {
+    type: String,
+    trim: true,
+    default: '',
+  },
+  qualification: {
+    type: String,
+    trim: true,
+    default: '',
+  },
+  experience: {
+    type: String,
+    trim: true,
+    default: '',
+  },
+  hospitalName: {
+    type: String,
+    trim: true,
+    default: 'Omisha Clinic',
+  },
+  photo: {
+    type: String,
+    trim: true,
+    default: '',
+  },
+  consultationFee: {
+    type: Number,
+    default: 500 // Default Fee
+  },
+  regNumber: {
     type: String,
     trim: true,
     default: '',
@@ -98,10 +155,29 @@ const UserSchema = new mongoose.Schema({
     date: Date,
     type: { type: String, enum: ['Leave', 'Emergency', 'Half-Day'] },
     note: String
-  }]
+  }],
+
+  // Theme Preference
+  themePreference: {
+    type: String,
+    enum: ['light', 'dark', 'system'],
+    default: 'system'
+  }
 
 }, {
-  timestamps: true
+  timestamps: true,
+  toJSON: { virtuals: true },
+  toObject: { virtuals: true }
+});
+
+// Virtual for Age
+UserSchema.virtual('age').get(function () {
+  if (this.dob) {
+    const diff = Date.now() - this.dob.getTime();
+    const ageDate = new Date(diff);
+    return Math.abs(ageDate.getUTCFullYear() - 1970);
+  }
+  return this.storedAge !== undefined ? this.storedAge : 'N/A';
 });
 
 // Index only for role since username and mobile already have unique: true

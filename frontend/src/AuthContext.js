@@ -2,12 +2,16 @@ import React, { useState, useEffect, useContext, createContext } from "react";
 import { loginAPI, registerAPI, registerStaffAPI, updateDoctorAvailabilityAPI } from "./api";
 import toast from "react-hot-toast";
 import axios from 'axios'; // Needed for direct refresh call
+import { useTheme } from './context/ThemeContext';
+import { useNavigate } from "react-router-dom";
 
 const AuthContext = createContext();
 
 export function AuthProvider({ children }) {
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
+  const { syncThemeWithBackend } = useTheme();
+  const navigate = useNavigate();
 
   // === NEW: REFRESH USER DATA ===
   const refreshUser = async () => {
@@ -24,6 +28,9 @@ export function AuthProvider({ children }) {
       if (res.data.success) {
         setUser(res.data.user);
         localStorage.setItem("user", JSON.stringify(res.data.user));
+        if (res.data.user.themePreference) {
+          syncThemeWithBackend(res.data.user.themePreference);
+        }
       }
     } catch (err) {
       console.error("Failed to refresh user data", err);
@@ -70,6 +77,10 @@ export function AuthProvider({ children }) {
         setUser(userData);
         localStorage.setItem("user", JSON.stringify(userData));
         localStorage.setItem("token", res.data.token);
+
+        if (userData.themePreference) {
+          syncThemeWithBackend(userData.themePreference);
+        }
 
         // Fetch latest details immediately (to check security question)
         await refreshUser();
@@ -119,19 +130,34 @@ export function AuthProvider({ children }) {
   };
 
   // Logout
-  const logout = () => {
+  const logout = async () => {
+    if (user?.role === "doctor") {
+      try {
+        await updateDoctorAvailabilityAPI(user._id, {
+          status: "Not Available",
+          breakDuration: 0
+        });
+      } catch (err) {
+        console.error("Failed to update status on logout", err);
+      }
+    }
+
     setUser(null);
     localStorage.removeItem("user");
     localStorage.removeItem("token");
     toast.success("Logged out successfully");
-    window.location.replace("/");
+    navigate("/");
   };
 
   // Silent Logout (for landing page security - no toast, no redirect)
   const silentLogout = () => {
-    // Clear ALL storage
+    // Clear storage but PRESERVE THEME
+    const theme = localStorage.getItem('theme');
     localStorage.clear();
+    if (theme) localStorage.setItem('theme', theme);
+
     sessionStorage.clear();
+
     // Clear React state
     setUser(null);
     // No toast notification

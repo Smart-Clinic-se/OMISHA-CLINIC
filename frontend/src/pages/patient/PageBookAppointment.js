@@ -5,14 +5,17 @@ import { getDoctorsAPI, addToQueueAPI } from "../../api";
 import toast from "react-hot-toast";
 import {
     Stethoscope,
-    Clock,
     Calendar,
     User,
     Phone,
     CheckCircle,
     AlertCircle,
-    ArrowLeft
+    ArrowLeft,
+    Clock,
+    CreditCard
 } from "lucide-react";
+import Select from "../../components/ui/Select";
+import { useEnterNavigation } from "../../hooks/useEnterNavigation";
 
 export default function PageBookAppointment() {
     const { user } = useAuth();
@@ -22,10 +25,16 @@ export default function PageBookAppointment() {
     const [loading, setLoading] = useState(true);
     const [submitting, setSubmitting] = useState(false);
 
+    const formRef = useEnterNavigation();
+
     // Form State
     const [selectedDoctor, setSelectedDoctor] = useState("");
     const [visitType, setVisitType] = useState("New");
     const [symptoms, setSymptoms] = useState("");
+
+    // Derived State
+    const selectedDocData = doctors.find(d => d._id === selectedDoctor);
+    const consultationFee = selectedDocData?.consultationFee || 500; // Default if missing
 
     useEffect(() => {
         const fetchDoctors = async () => {
@@ -60,7 +69,7 @@ export default function PageBookAppointment() {
                 assignedTo: selectedDoctor,
                 chiefComplaint: symptoms,
                 bookingSource: "Online",
-                visitType: visitType, // Now user can select
+                visitType: visitType,
                 age: user.age || 0,
                 gender: user.gender || "Other"
             });
@@ -77,141 +86,179 @@ export default function PageBookAppointment() {
     if (!user) return null;
 
     return (
-        <div className="min-h-screen bg-slate-950 p-6">
-            <div className="max-w-6xl mx-auto">
-                <button
-                    onClick={() => navigate(`/app/patient/queue`, { replace: true })}
-                    className="mb-4 flex items-center gap-2 text-slate-400 hover:text-blue-400 font-bold transition-colors"
-                >
-                    <ArrowLeft className="w-4 h-4" /> Back to Live Queue
-                </button>
+        <div className="max-w-6xl mx-auto p-4 animate-fade-in-up">
 
-                <div className="text-center mb-10">
-                    <h1 className="text-3xl font-black text-white">Book Appointment</h1>
-                    <p className="text-slate-400">Secure your spot in the live queue.</p>
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+
+                {/* LEFT: Doctor Selection */}
+                <div className="lg:col-span-1 space-y-4">
+                    <h3 className="font-bold text-slate-700 dark:text-slate-200 flex items-center gap-2 uppercase text-xs tracking-wider">
+                        <Stethoscope className="w-4 h-4 text-blue-500" /> Select Physician
+                    </h3>
+
+                    <div className="space-y-3 max-h-[600px] overflow-y-auto custom-scrollbar pr-2">
+                        {loading ? (
+                            <div className="p-8 text-center text-slate-400 text-sm">Loading Physicians...</div>
+                        ) : doctors.length === 0 ? (
+                            <div className="p-6 bg-slate-100 dark:bg-slate-800 rounded-2xl text-center border-2 border-dashed border-slate-200 dark:border-slate-700 text-slate-500">
+                                No doctors available right now.
+                            </div>
+                        ) : (
+                            doctors.map((doc) => (
+                                <div
+                                    key={doc._id}
+                                    onClick={() => setSelectedDoctor(doc._id)}
+                                    className={`
+                                        group relative p-3 sm:p-4 rounded-2xl cursor-pointer border-2 transition-all duration-200 flex items-center gap-3 sm:gap-4
+                                        ${selectedDoctor === doc._id
+                                            ? "bg-blue-50 dark:bg-blue-900/20 border-blue-500 shadow-md"
+                                            : "bg-white dark:bg-slate-800 border-transparent hover:border-blue-300 dark:hover:border-blue-700 shadow-sm"
+                                        }
+                                    `}
+                                >
+                                    {/* Avatar */}
+                                    <div className={`
+                                        w-12 h-12 rounded-full flex items-center justify-center font-bold text-lg border
+                                        ${selectedDoctor === doc._id
+                                            ? "bg-blue-500 text-white border-blue-600"
+                                            : "bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300 border-slate-200 dark:border-slate-600"
+                                        }
+                                    `}>
+                                        {doc.name.charAt(0)}
+                                    </div>
+
+                                    {/* Info */}
+                                    <div className="flex-1">
+                                        <h4 className="font-bold text-slate-900 dark:text-white group-hover:text-blue-600 dark:group-hover:text-blue-400 transition-colors">Dr. {doc.name}</h4>
+                                        <p className="text-xs text-blue-600 dark:text-blue-400 font-bold uppercase tracking-wide">{doc.specialization || "General"}</p>
+
+                                        {/* Status Tag */}
+                                        {doc.availabilityStatus === 'On Break' ? (
+                                            <span className="mt-1 inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-bold bg-amber-100 text-amber-700 border border-amber-200">
+                                                <Clock className="w-3 h-3" /> On Break
+                                            </span>
+                                        ) : (
+                                            <span className="mt-1 inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-bold bg-emerald-100 text-emerald-700 border border-emerald-200">
+                                                <CheckCircle className="w-3 h-3" /> Available
+                                            </span>
+                                        )}
+                                    </div>
+
+                                    {/* Checkmark */}
+                                    {selectedDoctor === doc._id && (
+                                        <div className="bg-blue-500 rounded-full p-1">
+                                            <CheckCircle className="w-4 h-4 text-white" />
+                                        </div>
+                                    )}
+                                </div>
+                            ))
+                        )}
+                    </div>
                 </div>
 
-                <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+                {/* RIGHT: Appointment Form */}
+                <div className="lg:col-span-2">
+                    <div className="bg-white dark:bg-slate-800 rounded-3xl shadow-xl shadow-slate-200 dark:shadow-black/40 border border-slate-100 dark:border-slate-700 p-6 sm:p-8 relative overflow-hidden transition-colors duration-300">
+                        {/* Decorative Top Bar */}
+                        <div className="absolute top-0 left-0 w-full h-1.5 bg-gradient-to-r from-blue-500 via-cyan-500 to-blue-600"></div>
 
-                    {/* LEFT: Doctor Selection */}
-                    <div className="lg:col-span-1 space-y-4">
-                        <h3 className="font-bold text-white flex items-center gap-2">
-                            <Stethoscope className="w-5 h-5 text-blue-500" /> Select Physician
-                        </h3>
-                        <div className="space-y-3 max-h-[500px] overflow-y-auto pr-2">
-                            {loading ? <p className="text-slate-400">Loading...</p> : doctors.length === 0 ? (
-                                <div className="p-6 bg-slate-900/50 rounded-xl text-center border border-slate-800 text-slate-400">
-                                    No doctors online.
+                        {selectedDoctor ? (
+                            <div ref={formRef} className="space-y-8 animate-fade-in-up">
+
+                                {/* Patient Summary Card */}
+                                {/* Patient Summary Card */}
+                                <div className="bg-slate-50 dark:bg-slate-900/50 p-5 rounded-2xl border border-slate-200 dark:border-slate-700 flex flex-col sm:flex-row justify-between gap-4">
+                                    <div className="flex items-center gap-3">
+                                        <div className="p-2.5 bg-white dark:bg-slate-800 rounded-full border border-slate-200 dark:border-slate-700 shadow-sm"><User className="w-5 h-5 text-slate-500" /></div>
+                                        <div>
+                                            <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Patient</p>
+                                            <p className="font-bold text-slate-900 dark:text-white text-sm">{user.name}</p>
+                                        </div>
+                                    </div>
+                                    <div className="flex items-center gap-3">
+                                        <div className="p-2.5 bg-white dark:bg-slate-800 rounded-full border border-slate-200 dark:border-slate-700 shadow-sm"><Phone className="w-5 h-5 text-slate-500" /></div>
+                                        <div>
+                                            <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Contact</p>
+                                            <p className="font-bold text-slate-900 dark:text-white text-sm">{user.mobile}</p>
+                                        </div>
+                                    </div>
+                                    <div className="flex items-center gap-3">
+                                        <div className="p-2.5 bg-white dark:bg-slate-800 rounded-full border border-slate-200 dark:border-slate-700 shadow-sm"><Calendar className="w-5 h-5 text-slate-500" /></div>
+                                        <div>
+                                            <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Date</p>
+                                            <p className="font-bold text-slate-900 dark:text-white text-sm">{new Date().toLocaleDateString()}</p>
+                                        </div>
+                                    </div>
                                 </div>
-                            ) : (
-                                doctors.map((doc) => (
-                                    <div
-                                        key={doc._id}
-                                        onClick={() => setSelectedDoctor(doc._id)}
-                                        className={`p-4 rounded-xl cursor-pointer border-2 transition-all flex items-center gap-4 ${selectedDoctor === doc._id
-                                            ? "bg-blue-500/10 border-blue-500 shadow-md"
-                                            : "bg-slate-900/50 border-transparent hover:border-blue-500/30 shadow-sm"
-                                            }`}
-                                    >
-                                        <div className="w-12 h-12 bg-blue-500/10 text-blue-400 rounded-full flex items-center justify-center font-bold text-lg border border-blue-500/20">
-                                            {doc.name.charAt(0)}
-                                        </div>
+
+                                {/* Form Inputs */}
+                                <div className="space-y-6">
+                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                                         <div>
-                                            <h4 className="font-bold text-white">Dr. {doc.name}</h4>
-                                            <p className="text-xs text-blue-400 font-bold uppercase">{doc.specialization || "General"}</p>
-                                            {doc.availabilityStatus === 'On Break' && (
-                                                <span className="text-[10px] bg-amber-500/10 text-amber-400 px-2 py-0.5 rounded mt-1 inline-block border border-amber-500/20">On Break</span>
-                                            )}
-                                        </div>
-                                        {selectedDoctor === doc._id && <CheckCircle className="ml-auto w-6 h-6 text-blue-500" />}
-                                    </div>
-                                ))
-                            )}
-                        </div>
-                    </div>
-
-                    {/* RIGHT: Appointment Form */}
-                    <div className="lg:col-span-2">
-                        <div className="bg-slate-900/50 backdrop-blur-md rounded-2xl shadow-xl shadow-black/20 border border-slate-800 p-8 relative overflow-hidden">
-                            {/* Decorative Top Bar */}
-                            <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-blue-500 to-cyan-500"></div>
-
-                            {selectedDoctor ? (
-                                <div className="space-y-6 animate-fade-in-up">
-
-                                    {/* Patient Summary */}
-                                    <div className="bg-slate-800/50 p-4 rounded-xl border border-slate-700 flex flex-col md:flex-row justify-between gap-4">
-                                        <div className="flex items-center gap-3">
-                                            <div className="p-2 bg-slate-900 rounded-full border border-slate-800"><User className="w-5 h-5 text-slate-400" /></div>
-                                            <div>
-                                                <p className="text-xs font-bold text-slate-400 uppercase">Patient</p>
-                                                <p className="font-bold text-white">{user.name}</p>
-                                            </div>
-                                        </div>
-                                        <div className="flex items-center gap-3">
-                                            <div className="p-2 bg-slate-900 rounded-full border border-slate-800"><Phone className="w-5 h-5 text-slate-400" /></div>
-                                            <div>
-                                                <p className="text-xs font-bold text-slate-400 uppercase">Contact</p>
-                                                <p className="font-bold text-white">{user.mobile}</p>
-                                            </div>
-                                        </div>
-                                        <div className="flex items-center gap-3">
-                                            <div className="p-2 bg-slate-900 rounded-full border border-slate-800"><Calendar className="w-5 h-5 text-slate-400" /></div>
-                                            <div>
-                                                <p className="text-xs font-bold text-slate-400 uppercase">Date</p>
-                                                <p className="font-bold text-white">{new Date().toLocaleDateString()}</p>
-                                            </div>
-                                        </div>
-                                    </div>
-
-                                    {/* Input Fields */}
-                                    <div className="grid grid-cols-2 gap-6">
-                                        <div>
-                                            <label className="block text-xs font-bold text-slate-400 uppercase mb-2">Visit Type</label>
-                                            <select
-                                                className="w-full p-3 bg-slate-800 border border-slate-700 rounded-xl outline-none focus:ring-2 focus:ring-blue-500 font-medium text-white"
+                                            <label className="block text-xs font-bold text-slate-500 uppercase mb-2 ml-1">Visit Type</label>
+                                            <Select
+                                                name="visitType"
                                                 value={visitType}
                                                 onChange={(e) => setVisitType(e.target.value)}
-                                            >
-                                                <option value="New">New Consultation</option>
-                                                <option value="Follow-up">Follow-up Visit</option>
-                                            </select>
+                                                options={[
+                                                    { value: "New", label: "New Consultation" },
+                                                    { value: "Follow-up", label: "Follow-up Visit" }
+                                                ]}
+                                                className="w-full"
+                                            />
                                         </div>
                                         <div>
-                                            <label className="block text-xs font-bold text-slate-400 uppercase mb-2">Department</label>
-                                            <input disabled value="General Medicine" className="w-full p-3 bg-slate-800/50 border border-slate-700 rounded-xl text-slate-500 font-medium cursor-not-allowed" />
+                                            <label className="block text-xs font-bold text-slate-500 uppercase mb-2 ml-1">Consultation Fee</label>
+                                            <div className="w-full p-4 bg-slate-100 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700 rounded-xl text-slate-700 dark:text-slate-300 font-bold flex justify-between items-center">
+                                                <span>₹ {consultationFee}</span>
+                                                <span className="text-[10px] uppercase text-blue-500 bg-blue-50 dark:bg-blue-900/20 px-2 py-1 rounded">Pay at Clinic</span>
+                                            </div>
                                         </div>
                                     </div>
 
                                     <div>
-                                        <label className="block text-xs font-bold text-slate-400 uppercase mb-2">Chief Complaint / Symptoms *</label>
+                                        <label className="block text-xs font-bold text-slate-500 uppercase mb-2 ml-1">Chief Complaint / Symptoms *</label>
                                         <textarea
-                                            rows={3}
+                                            rows={4}
                                             placeholder="Describe your symptoms briefly (e.g. Fever, Headache...)"
-                                            className="w-full p-4 bg-slate-800 border border-slate-700 rounded-xl outline-none focus:ring-2 focus:ring-blue-500 resize-none text-white placeholder-slate-500"
+                                            className="w-full p-4 rounded-xl outline-none transition-all
+                                                bg-slate-50 dark:bg-slate-900 
+                                                border border-slate-200 dark:border-slate-700 
+                                                text-slate-900 dark:text-white 
+                                                placeholder-slate-400 
+                                                focus:bg-white dark:focus:bg-slate-950 
+                                                focus:ring-2 focus:border-transparent focus:ring-blue-500
+                                                shadow-sm resize-none"
                                             value={symptoms}
                                             onChange={(e) => setSymptoms(e.target.value)}
                                         />
                                     </div>
+                                </div>
 
-                                    <div className="pt-4 border-t border-slate-800 flex justify-end">
-                                        <button
-                                            onClick={handleBook}
-                                            disabled={submitting}
-                                            className="px-8 py-4 bg-blue-600 text-white font-bold rounded-xl hover:bg-blue-700 shadow-lg shadow-blue-900/20 disabled:opacity-70 flex items-center gap-2 transition-transform hover:-translate-y-1"
-                                        >
-                                            {submitting ? "Processing..." : "Confirm Appointment"}
-                                        </button>
+                                <div className="pt-6 border-t border-slate-100 dark:border-slate-700 flex flex-col md:flex-row items-center justify-between gap-4">
+                                    <div className="text-xs text-slate-400 flex items-center gap-2">
+                                        <CreditCard className="w-4 h-4" /> Payment will be collected at the reception.
                                     </div>
+                                    <button
+                                        type="submit"
+                                        onClick={handleBook}
+                                        disabled={submitting}
+                                        className="w-full sm:w-auto px-8 py-4 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-xl shadow-lg shadow-blue-500/30 disabled:opacity-70 disabled:cursor-not-allowed flex justify-center items-center gap-2 transition-all hover:-translate-y-1 active:scale-95"
+                                    >
+                                        {submitting ? "Processing..." : "Confirm Appointment"}
+                                    </button>
+                                </div>
 
+                            </div>
+                        ) : (
+                            <div className="h-80 flex flex-col items-center justify-center text-center">
+                                <div className="w-20 h-20 bg-slate-50 dark:bg-slate-900 rounded-full flex items-center justify-center mb-4">
+                                    <AlertCircle className="w-10 h-10 text-slate-300 dark:text-slate-600" />
                                 </div>
-                            ) : (
-                                <div className="h-64 flex flex-col items-center justify-center text-slate-500">
-                                    <AlertCircle className="w-12 h-12 mb-4 opacity-20" />
-                                    <p>Select a doctor from the list to begin.</p>
-                                </div>
-                            )}
-                        </div>
+                                <h3 className="text-xl font-bold text-slate-900 dark:text-white mb-2">No Physician Selected</h3>
+                                <p className="text-slate-500 dark:text-slate-400 max-w-xs mx-auto">Please select a doctor from the list on the left to proceed with booking.</p>
+                            </div>
+                        )}
                     </div>
                 </div>
             </div>

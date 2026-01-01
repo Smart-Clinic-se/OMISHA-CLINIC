@@ -6,6 +6,10 @@ const User = require('../models/User');
 const multer = require('multer');
 const { storage } = require('../config/cloudinary');
 const upload = multer({ storage });
+const { protect } = require('../middleware/authMiddleware'); // [NEW] Import Auth
+
+// === APPLY AUTH MIDDLEWARE TO ALL ROUTES ===
+router.use(protect);
 
 // === POST: Add New Prescription (Finalize Visit) ===
 router.post('/add', async (req, res) => {
@@ -18,13 +22,16 @@ router.post('/add', async (req, res) => {
       patientName,
       patientMobile,
       symptoms,
-      diagnosis,
+      diagnosis, // Combined String (Legacy)
+      primaryDiagnosis,
+      secondaryDiagnosis,
       medicines,
       testsRequested,
       advice,
       notes,
       followUpDate,
-      isFinalized
+      isFinalized,
+      isPrivate // [NEW] Doctor Toggle
     } = req.body;
 
     if (!queueId || !patientId || !doctorId || !diagnosis) {
@@ -49,7 +56,8 @@ router.post('/add', async (req, res) => {
       notes,
       followUpDate,
       isFinalized: !!isFinalized,
-      finalizedAt: isFinalized ? new Date() : null
+      finalizedAt: isFinalized ? new Date() : null,
+      isPrivate: !!isPrivate
     });
 
     const savedRecord = await newRecord.save();
@@ -57,6 +65,8 @@ router.post('/add', async (req, res) => {
     if (isFinalized) {
       await Queue.findByIdAndUpdate(queueId, {
         status: 'Completed',
+        primaryDiagnosis: primaryDiagnosis || diagnosis, // Fallback to combined if missing
+        secondaryDiagnosis: secondaryDiagnosis || "",
         completedTime: new Date()
       });
 
@@ -127,7 +137,7 @@ router.post('/upload/:id', upload.single('reportFile'), async (req, res) => {
   try {
     if (!req.file) return res.status(400).json({ message: "No file uploaded" });
 
-    const { reportType, uploadedBy } = req.body;
+    const { reportType, uploadedBy, isPrivate } = req.body;
     const record = await MedicalRecord.findById(req.params.id);
 
     if (!record) return res.status(404).json({ message: "Medical Record not found" });
@@ -137,7 +147,8 @@ router.post('/upload/:id', upload.single('reportFile'), async (req, res) => {
       reportType,
       fileUrl: req.file.path,
       uploadedBy,
-      uploadedAt: new Date()
+      uploadedAt: new Date(),
+      isPrivate: isPrivate === 'true' || isPrivate === true // Ensure boolean
     });
 
     await record.save();
@@ -162,7 +173,6 @@ router.post('/upload/:id', upload.single('reportFile'), async (req, res) => {
 // === GET: Patient History (Search by Name or Mobile) ===
 router.get('/history', async (req, res) => {
   try {
-    // UPDATED LOGIC: Accept 'name' parameter
     const { patientId, mobile, name } = req.query;
 
     const query = {};
@@ -172,18 +182,14 @@ router.get('/history', async (req, res) => {
     } else if (mobile) {
       query.patientMobile = mobile;
     } else if (name) {
-      // 1. Find User ID by Name (Case Insensitive Regex)
-      // Warning: If multiple users have same name, this picks matching ones
       const users = await User.find({
         name: { $regex: new RegExp(name, 'i') },
         role: 'patient'
       }).select('_id');
 
       if (users.length === 0) {
-        // If no user found, try searching the denormalized 'patientName' in records directly
         query.patientName = { $regex: new RegExp(name, 'i') };
       } else {
-        // Search records belonging to ANY of the found user IDs
         const userIds = users.map(u => u._id);
         query.patientId = { $in: userIds };
       }
@@ -193,11 +199,33 @@ router.get('/history', async (req, res) => {
 
     const history = await MedicalRecord.find(query)
       .sort({ visitDate: -1 })
-      .limit(10) // Increased limit to see more if duplicates exist
-      .populate('doctorId', 'name specialization')
+      .limit(10)
+      .populate('doctorId', 'name specialization qualification regNumber hospitalName')
       .populate('attachments.uploadedBy', 'name');
 
-    res.json({ success: true, count: history.length, data: history });
+    // === STRICT PRIVACY CONTROL ===
+    // If not Staff/Doctor, completely REMOVE private records.
+    // ALSO Filter Private Attachments.
+    let filteredHistory = history;
+
+    const isStaffOrDoctor = ['doctor', 'staff', 'admin'].includes(req.user.role);
+
+    if (!isStaffOrDoctor) {
+      // 1. Filter out Private Records
+      filteredHistory = history.filter(h => !h.isPrivate);
+
+      // 2. Filter out Private Attachments within allowed records
+      // We must return new objects to avoid mutating Mongoose docs unpredictably in memory
+      filteredHistory = filteredHistory.map(record => {
+        const recObj = record.toObject();
+        if (recObj.attachments) {
+          recObj.attachments = recObj.attachments.filter(a => !a.isPrivate);
+        }
+        return recObj;
+      });
+    }
+
+    res.json({ success: true, count: filteredHistory.length, data: filteredHistory, downloadAllowed: true });
 
   } catch (err) {
     console.error("History Error:", err);
@@ -209,11 +237,27 @@ router.get('/history', async (req, res) => {
 router.get('/record/:id', async (req, res) => {
   try {
     const record = await MedicalRecord.findById(req.params.id)
-      .populate('doctorId', 'name specialization')
+      .populate('doctorId', 'name specialization qualification regNumber hospitalName')
       .populate('patientId', 'name mobile age gender')
       .populate('amendments.amendedBy', 'name role');
 
     if (!record) return res.status(404).json({ message: "Record not found" });
+
+    // === STRICT PRIVACY CONTROL ===
+    const isStaffOrDoctor = ['doctor', 'staff', 'admin'].includes(req.user.role);
+
+    if (!isStaffOrDoctor) {
+      if (record.isPrivate) {
+        return res.status(403).json({ messages: "Access Denied: Private Record" });
+      }
+
+      // Filter Private Attachments for Single Record View
+      const recObj = record.toObject();
+      if (recObj.attachments) {
+        recObj.attachments = recObj.attachments.filter(a => !a.isPrivate);
+      }
+      return res.json({ success: true, data: recObj });
+    }
 
     res.json({ success: true, data: record });
   } catch (err) {
