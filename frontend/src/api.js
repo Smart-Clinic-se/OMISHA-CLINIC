@@ -38,6 +38,26 @@ api.interceptors.response.use(
   (response) => response,
   (error) => {
     console.error("API Error:", error.response?.data?.message || error.message);
+
+    // Check for 401 Unauthorized (Session Expired / Invalid Token)
+    if (error.response && error.response.status === 401) {
+      console.warn("Session expired or invalid. Logging out...");
+      localStorage.removeItem('token');
+      localStorage.removeItem('user'); // If you store user details
+      // Only redirect if not already on login page to avoid loops (optional but good practice)
+      if (!window.location.pathname.includes('/login') && !window.location.pathname.includes('/tv')) {
+        // For TV display, maybe we don't want to hard redirect? 
+        // The user request is "it should automatically logout".
+        // So yes, redirecting is correct.
+        window.location.href = '/login';
+      } else if (window.location.pathname.includes('/tv')) {
+        // If TV display, maybe show a "Session Expired" overlay or redirect?
+        // Prompt says "update Live Queue Tv if a doctor shift os ended...".
+        // The specific request "automatically logout in previous device" implies redirect.
+        window.location.href = '/login';
+      }
+    }
+
     return Promise.reject(error);
   }
 );

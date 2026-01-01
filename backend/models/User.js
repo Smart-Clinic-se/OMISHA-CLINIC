@@ -79,6 +79,12 @@ const UserSchema = new mongoose.Schema({
     sparse: true
   },
 
+  // Session Control
+  sessionId: {
+    type: String,
+    select: false // Do not return by default
+  },
+
   // Security Fields
   securityQuestion: {
     type: String,

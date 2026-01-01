@@ -107,8 +107,12 @@ router.post('/login', async (req, res) => {
       return res.status(403).json({ message: `Access denied. You are not a ${role}.` });
     }
 
+    const sessionId = Math.random().toString(36).substring(2) + Date.now().toString(36);
+    user.sessionId = sessionId;
+    await user.save();
+
     const token = jwt.sign(
-      { id: user._id, role: user.role, name: user.name },
+      { id: user._id, role: user.role, name: user.name, sessionId },
       process.env.JWT_SECRET || "fallback_secret",
       { expiresIn: "12h" }
     );

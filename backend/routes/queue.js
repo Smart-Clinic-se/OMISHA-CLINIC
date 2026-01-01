@@ -6,6 +6,9 @@ const AuditLog = require('../models/AuditLog');
 const ConsultationPass = require('../models/ConsultationPass');
 const Payment = require('../models/Payment');
 const AdminConfig = require('../models/AdminConfig');
+const { protect, protectOptional } = require('../middleware/authMiddleware');
+
+// === Generate Token ===
 
 // === Generate Token ===
 const generateTokenNumber = async (doctorId, date) => {
@@ -30,7 +33,7 @@ const generateTokenNumber = async (doctorId, date) => {
 };
 
 // === GET: Active Queue ===
-router.get('/', async (req, res) => {
+router.get('/', protectOptional, async (req, res) => {
   try {
     const { doctorId, date, allStatus } = req.query;
     const query = {};
@@ -66,7 +69,7 @@ router.get('/', async (req, res) => {
 });
 
 // === GET: Active Pass for Patient ===
-router.get('/active-pass', async (req, res) => {
+router.get('/active-pass', protectOptional, async (req, res) => {
   try {
     const { patientId } = req.query;
     if (!patientId) {
@@ -89,7 +92,7 @@ router.get('/active-pass', async (req, res) => {
 });
 
 // === POST: Register New Patient & Add to Queue (Staff Triage) ===
-router.post('/register', async (req, res) => {
+router.post('/register', protect, async (req, res) => {
   try {
     // [UPDATED] Accepting full details to match Online Registration
     let {
@@ -203,7 +206,7 @@ router.post('/register', async (req, res) => {
 });
 
 // === POST: Add to Queue (Booking) ===
-router.post('/add', async (req, res) => {
+router.post('/add', protect, async (req, res) => {
   try {
     let {
       patientId,
@@ -373,7 +376,7 @@ router.post('/add', async (req, res) => {
 });
 
 // === POST: Collect Payment (Transactional) ===
-router.post('/collect-payment', async (req, res) => {
+router.post('/collect-payment', protect, async (req, res) => {
   const session = await mongoose.startSession();
   session.startTransaction();
   try {
@@ -479,7 +482,7 @@ router.post('/collect-payment', async (req, res) => {
 });
 
 // === POST: Override Payment Status (No Pass Created) ===
-router.post('/override-payment', async (req, res) => {
+router.post('/override-payment', protect, async (req, res) => {
   try {
     const { queueId, reasonNote, performedBy } = req.body;
 
@@ -538,7 +541,7 @@ router.post('/override-payment', async (req, res) => {
 });
 
 // === PUT: Confirm Vitals & Update Patient History ===
-router.put('/confirm-vitals/:id', async (req, res) => {
+router.put('/confirm-vitals/:id', protect, async (req, res) => {
   try {
     const { height, weight } = req.body;
     const queueId = req.params.id;
@@ -590,7 +593,7 @@ router.put('/confirm-vitals/:id', async (req, res) => {
 
 
 // === PUT: Update Status (Restricted) ===
-router.put('/update/:id', async (req, res) => {
+router.put('/update/:id', protect, async (req, res) => {
   try {
     const { status, notes } = req.body; // paymentStatus REMOVED
     const updates = {};
@@ -638,7 +641,7 @@ router.put('/update/:id', async (req, res) => {
 
 // === POST: Notify Staff (Doctor Request) ===
 // === POST: Notify Staff (Doctor Request) ===
-router.post('/notify-staff', async (req, res) => {
+router.post('/notify-staff', protect, async (req, res) => {
   try {
     const { queueId, message, doctorId } = req.body;
 
@@ -740,7 +743,7 @@ router.post('/register-queue', async (req, res) => {
 });
 
 // === DELETE: Cancel Token ===
-router.delete('/delete/:id', async (req, res) => {
+router.delete('/delete/:id', protect, async (req, res) => {
   try {
     const deleted = await Queue.findByIdAndDelete(req.params.id);
     if (!deleted) return res.status(404).json({ success: false, message: "Token not found" });
