@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useContext, createContext } from "react";
-import { loginAPI, registerAPI, registerStaffAPI, updateDoctorAvailabilityAPI } from "./api";
+import api, { loginAPI, registerAPI, registerStaffAPI, updateDoctorAvailabilityAPI } from "./api";
 import toast from "react-hot-toast";
 import axios from 'axios'; // Needed for direct refresh call
 import { useTheme } from './context/ThemeContext';
@@ -16,14 +16,8 @@ export function AuthProvider({ children }) {
   // === NEW: REFRESH USER DATA ===
   const refreshUser = async () => {
     try {
-      const token = localStorage.getItem('token');
-      if (!token) return;
-
-      // We use a direct axios call here to the /me endpoint we added to backend
-      // This ensures we get the latest 'securityQuestion' status
-      const res = await axios.get('http://127.0.0.1:5000/api/auth/me', {
-        headers: { Authorization: `Bearer ${token}` }
-      });
+      // We use the api instance which handles the base URL and token
+      const res = await api.get('/auth/me');
 
       if (res.data.success) {
         setUser(res.data.user);

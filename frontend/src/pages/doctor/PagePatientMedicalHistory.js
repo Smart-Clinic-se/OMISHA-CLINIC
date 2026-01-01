@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { useAuth } from "../../AuthContext";
-import { getPatientHistoryAPI } from "../../api";
+import api, { getPatientHistoryAPI } from "../../api";
 import {
     Search,
     User,
@@ -66,12 +66,10 @@ export default function PagePatientMedicalHistory() {
         setLoading(true);
 
         try {
-            const token = localStorage.getItem('token');
-            // Searching users
-            const res = await fetch(`http://127.0.0.1:5000/api/auth/users?role=patient&search=${query}`, {
-                headers: { Authorization: `Bearer ${token}` }
+            const res = await api.get('/auth/users', {
+                params: { role: 'patient', search: query }
             });
-            const data = await res.json();
+            const data = res.data;
 
             if (Array.isArray(data)) {
                 setSearchResults(data);

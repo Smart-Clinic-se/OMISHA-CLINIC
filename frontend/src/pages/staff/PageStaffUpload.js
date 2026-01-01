@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from "react";
 import { useNavigate } from "react-router-dom";
-import { getPatientHistoryAPI, uploadReportAPI } from "../../api";
+import api, { getPatientHistoryAPI, uploadReportAPI } from "../../api";
 import { useAuth } from "../../AuthContext";
 import toast from "react-hot-toast";
 import {
@@ -48,11 +48,10 @@ export default function PageStaffUpload() {
         setSearchResults(null);
 
         try {
-            const token = localStorage.getItem('token');
-            const res = await fetch(`http://127.0.0.1:5000/api/auth/users?role=patient&search=${query}`, {
-                headers: { Authorization: `Bearer ${token}` }
+            const res = await api.get('/auth/users', {
+                params: { role: 'patient', search: query }
             });
-            const data = await res.json();
+            const data = res.data;
 
             if (Array.isArray(data) && data.length > 0) {
                 setSearchResults(data);
