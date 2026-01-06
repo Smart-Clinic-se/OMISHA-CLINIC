@@ -108,7 +108,12 @@ export default function PageQueueManagement() {
         staffNote: "",
         overrideReason: ""
     });
+
     const [isOverrideMode, setIsOverrideMode] = useState(false);
+
+    // Doctor Selection Modal for Search Results
+    const [showDoctorSelectModal, setShowDoctorSelectModal] = useState(false);
+    const [pendingPatient, setPendingPatient] = useState(null);
 
     // 1. Load Doctors
     useEffect(() => {
@@ -347,23 +352,34 @@ export default function PageQueueManagement() {
         performSearch(searchQuery);
     };
 
-    const handleAddToQueue = async (patient) => {
+    // Function to Open Doctor Selection Modal
+    const openDoctorSelection = (patient) => {
+        setPendingPatient(patient);
+        setShowDoctorSelectModal(true);
+    };
+
+    // Actual Add to Queue Function (After Doctor Selected)
+    const confirmAddToQueue = async (doctorId) => {
+        if (!pendingPatient || !doctorId) return;
+
         try {
             await addToQueueAPI({
-                patientId: patient._id,
-                patientName: patient.name,
-                patientMobile: patient.mobile,
-                age: patient.age,
-                gender: patient.gender,
+                patientId: pendingPatient._id,
+                patientName: pendingPatient.name,
+                patientMobile: pendingPatient.mobile,
+                age: pendingPatient.age,
+                gender: pendingPatient.gender,
                 visitType: "Follow-up",
                 bookingSource: "Walk-in",
-                assignedDoctor: selectedDoctor,
+                assignedTo: doctorId,
                 chiefComplaint: "Walk-in Visit"
             });
             toast.success("Patient Added to Queue!");
             setSearchResults(null);
             setSearchQuery("");
             setShowSearchModal(false);
+            setShowDoctorSelectModal(false); // Close Doctor Modal
+            setPendingPatient(null);
             fetchQueue();
         } catch (err) {
             toast.error(err.response?.data?.message || "Failed to add");
@@ -648,7 +664,7 @@ export default function PageQueueManagement() {
                                                 </div>
                                             </div>
                                             <button
-                                                onClick={() => handleAddToQueue(p)}
+                                                onClick={() => openDoctorSelection(p)}
                                                 className="px-4 py-2 bg-slate-900 dark:bg-white text-white dark:text-slate-900 font-bold rounded-lg hover:scale-[1.02] shadow-lg active:scale-95 transition-all flex items-center gap-1.5 text-xs"
                                             >
                                                 <Plus className="w-4 h-4" /> Add
@@ -1070,6 +1086,60 @@ export default function PageQueueManagement() {
                                 </p>
                             </div>
                             <button onClick={() => setShowPassDetails(false)} className="w-full py-3 bg-slate-900 text-white hover:bg-slate-800 font-bold rounded-xl transition shadow-xl text-sm">Close</button>
+                        </div>
+                    </div>
+                )
+            }
+
+            {/* 6. DOCTOR SELECTION MODAL */}
+            {
+                showDoctorSelectModal && pendingPatient && (
+                    <div className="fixed inset-0 z-[1100] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-md animate-in fade-in duration-200">
+                        <div className="bg-white dark:bg-slate-900 w-full max-w-sm rounded-[2rem] shadow-2xl p-6 border border-slate-200 dark:border-slate-800">
+                            <div className="text-center mb-6">
+                                <div className="w-16 h-16 bg-blue-100 dark:bg-blue-900/30 rounded-full flex items-center justify-center mx-auto mb-4">
+                                    <Stethoscope className="w-8 h-8 text-blue-600 dark:text-blue-400" />
+                                </div>
+                                <h3 className="text-xl font-black text-slate-900 dark:text-white">Assign Doctor</h3>
+                                <p className="text-sm text-slate-500 font-medium mt-1">Select a doctor for <b>{pendingPatient.name}</b></p>
+                            </div>
+
+                            <div className="space-y-3 max-h-[50vh] overflow-y-auto custom-scrollbar pr-1">
+                                {doctors.filter(d => d.availabilityStatus === 'Available').length === 0 && (
+                                    <div className="p-4 bg-orange-50 dark:bg-orange-900/20 rounded-xl text-center">
+                                        <p className="text-xs font-bold text-orange-600 dark:text-orange-400">No doctors currently marked Available.</p>
+                                    </div>
+                                )}
+
+                                {doctors.map(doc => {
+                                    const isAvailable = doc.availabilityStatus === 'Available';
+                                    if (!isAvailable) return null; // Show ONLY available doctors as per request
+
+                                    return (
+                                        <button
+                                            key={doc._id}
+                                            onClick={() => confirmAddToQueue(doc._id)}
+                                            className="w-full p-4 flex items-center gap-4 bg-slate-50 dark:bg-slate-800 hover:bg-blue-50 dark:hover:bg-blue-900/20 border-2 border-transparent hover:border-blue-200 dark:hover:border-blue-800 rounded-2xl transition-all group text-left"
+                                        >
+                                            <div className="w-10 h-10 rounded-full bg-white dark:bg-slate-700 shadow-sm flex items-center justify-center font-bold text-slate-600 dark:text-slate-300">
+                                                {doc.name[0]}
+                                            </div>
+                                            <div>
+                                                <h4 className="font-bold text-slate-900 dark:text-white text-sm group-hover:text-blue-600 transition-colors">Dr. {doc.name}</h4>
+                                                <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">{doc.specialization || 'General'}</p>
+                                            </div>
+                                            <ChevronRight className="w-5 h-5 ml-auto text-slate-300 group-hover:text-blue-500" />
+                                        </button>
+                                    );
+                                })}
+                            </div>
+
+                            <button
+                                onClick={() => { setShowDoctorSelectModal(false); setPendingPatient(null); }}
+                                className="w-full mt-6 py-3 bg-white dark:bg-slate-800 border-2 border-slate-200 dark:border-slate-700 text-slate-500 font-bold rounded-xl hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors text-sm"
+                            >
+                                Cancel
+                            </button>
                         </div>
                     </div>
                 )
