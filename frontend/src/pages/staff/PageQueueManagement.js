@@ -133,8 +133,10 @@ export default function PageQueueManagement() {
 
         // Listen for Real-time Availability Updates
         const cleanup = listenToDoctorStatus((payload) => {
+            console.log("Real-time Doctor Update Received:", payload);
             setDoctors(prevDoctors => prevDoctors.map(doc => {
-                if (doc._id === payload.doctorId) {
+                if (String(doc._id) === String(payload.doctorId)) {
+                    console.log(`Updating Doctor ${doc.name} to ${payload.status}`);
                     return { ...doc, availabilityStatus: payload.status, breakUntil: payload.breakUntil };
                 }
                 return doc;
