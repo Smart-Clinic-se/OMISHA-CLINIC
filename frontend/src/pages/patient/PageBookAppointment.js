@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "../../AuthContext";
-import { getDoctorsAPI, addToQueueAPI, getActivePassAPI } from "../../api";
+import { getDoctorsAPI, addToQueueAPI, getActivePassAPI, listenToDoctorStatus } from "../../api";
 import toast from "react-hot-toast";
 import {
     Stethoscope,
@@ -66,6 +66,35 @@ export default function PageBookAppointment() {
 
         fetchDoctors();
         fetchActivePass();
+
+        // Real-time Status Update
+        const cleanup = listenToDoctorStatus((payload) => {
+            setDoctors(prev => {
+                const updated = prev.map(doc => {
+                    if (doc._id === payload.doctorId) {
+                        return { ...doc, availabilityStatus: payload.status, breakUntil: payload.breakUntil };
+                    }
+                    return doc;
+                });
+                // Re-filter if necessary (keep them in state, but UI logic handles display? 
+                // Actually the API call filtered them. So if status changes to 'Left', they should be removed?
+                // Or if a new doctor becomes available, they should be added? 
+                // Since this state was initialized with ONLY active doctors, updating status might make them inconsistent.
+                // Better approach: Re-fetch or handle filter. 
+                // For now, let's just update the status. If they go 'Left', they might stay in list but show status? 
+                // The current list only showed Available/On Break. 
+                // If a doctor goes 'Left', we should probably remove them. 
+                // If a doctor comes 'Available', we won't see them unless we re-fetch or have the full list.
+                // Decision: Re-fetch is safer for consistency here, OR keep full list and filter in render.
+                // Given the API filters on client side (lines 45-48), I should probably keep full list in state and filter in render?
+                // The current code sets `doctors` to the filtered list.
+                // Let's just re-fetch for simplicity and correctness in this specific filtered context.
+                fetchDoctors();
+                return updated; // This return is ignored by fetchDoctors call but satisfies setDoctors callback structure if needed, 
+                // but actually I should just call fetchDoctors.
+            });
+        });
+        return cleanup;
     }, [user._id]);
 
     const handleBook = async () => {

@@ -7,6 +7,7 @@ import {
     registerPatientQueueAPI,
     listenToQueueUpdates,
     listenToStaffNotifications,
+    listenToDoctorStatus,
     collectPaymentAPI,
     overridePaymentAPI,
     confirmVitalsAPI,
@@ -115,7 +116,7 @@ export default function PageQueueManagement() {
     const [showDoctorSelectModal, setShowDoctorSelectModal] = useState(false);
     const [pendingPatient, setPendingPatient] = useState(null);
 
-    // 1. Load Doctors
+    // 1. Load Doctors & Listen for Status Updates
     useEffect(() => {
         const loadDoctors = async () => {
             try {
@@ -129,6 +130,18 @@ export default function PageQueueManagement() {
             }
         };
         loadDoctors();
+
+        // Listen for Real-time Availability Updates
+        const cleanup = listenToDoctorStatus((payload) => {
+            setDoctors(prevDoctors => prevDoctors.map(doc => {
+                if (doc._id === payload.doctorId) {
+                    return { ...doc, availabilityStatus: payload.status, breakUntil: payload.breakUntil };
+                }
+                return doc;
+            }));
+        });
+
+        return cleanup;
     }, []);
 
     // 2. Fetch Queue

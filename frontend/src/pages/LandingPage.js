@@ -15,7 +15,7 @@ import {
   GraduationCap,
   Calendar
 } from "lucide-react";
-import { getDoctorsAPI } from "../api";
+import { getDoctorsAPI, listenToDoctorStatus } from "../api";
 import DoctorCard from "../components/DoctorCard";
 import { useTheme } from "../context/ThemeContext";
 
@@ -34,6 +34,17 @@ export default function LandingPage() {
       }
     };
     fetchDoctors();
+
+    // Real-time Status Update
+    const cleanup = listenToDoctorStatus((payload) => {
+      setDoctors(prev => prev.map(doc => {
+        if (doc._id === payload.doctorId) {
+          return { ...doc, availabilityStatus: payload.status, breakUntil: payload.breakUntil };
+        }
+        return doc;
+      }));
+    });
+    return cleanup;
   }, []);
 
   const toggleTheme = () => {
