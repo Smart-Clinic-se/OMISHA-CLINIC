@@ -98,6 +98,10 @@ export default function AuthPage() {
   useEffect(() => {
     const token = localStorage.getItem('token');
     if (token) navigate(theme.redirect);
+
+    // Warm up backend to ensure fast response on submit
+    const BASE_URL = process.env.REACT_APP_API_URL || 'http://localhost:5000';
+    fetch(`${BASE_URL}/health`).catch(() => { });
   }, [navigate, theme.redirect]);
 
   const handleChange = (e) => {

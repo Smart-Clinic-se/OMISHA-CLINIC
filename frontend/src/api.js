@@ -49,12 +49,12 @@ api.interceptors.response.use(
         // For TV display, maybe we don't want to hard redirect? 
         // The user request is "it should automatically logout".
         // So yes, redirecting is correct.
-        window.location.href = '/login';
+        window.location.href = '/';
       } else if (window.location.pathname.includes('/tv')) {
         // If TV display, maybe show a "Session Expired" overlay or redirect?
         // Prompt says "update Live Queue Tv if a doctor shift os ended...".
         // The specific request "automatically logout in previous device" implies redirect.
-        window.location.href = '/login';
+        window.location.href = '/';
       }
     }
 
